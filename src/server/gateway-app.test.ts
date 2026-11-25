@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
 import { after, before, test } from "node:test";
+import { trace } from "@opentelemetry/api";
+import { NodeSDK, tracing } from "@opentelemetry/sdk-node";
 import type { Pool } from "pg";
 import { Approvals } from "./approvals";
 import { createGatewayApp, type GatewayDeps } from "./gateway-app";
+import { GatewayClient } from "./gateway-client";
+import type { CallModel } from "./llm";
 import { MEMBER_FRESH_DAYS, recordMember } from "./members";
 import type { Memory } from "./memory";
 import { setRule } from "./policy";
@@ -21,6 +25,10 @@ let closeMemory: () => Promise<void>;
 let server: Server;
 let base: string;
 const WORKER = randomUUID();
+// Spans stay in memory here, so the tests send nothing to Langfuse.
+const sdk = new NodeSDK({ serviceName: "gateway-test", spanProcessors: [new tracing.SimpleSpanProcessor(new tracing.InMemorySpanExporter())] });
+// The one test that reaches a model sets this. Every other test fails loudly if it asks for one.
+let modelCall: CallModel = async () => unreachable("a model");
 
 // These tests reach only the policy, the outbox, memory and a vendor lookup. Anything else the gateway is asked for fails loudly.
 function unreachable(name: string): never {
@@ -28,11 +36,12 @@ function unreachable(name: string): never {
 }
 
 before(async () => {
+  sdk.start();
   ({ pool, close } = await testDatabase());
   ({ memory, close: closeMemory } = await testMemory());
   const deps: GatewayDeps = {
     pool,
-    callModel: async () => unreachable("a model"),
+    callModel: (ask) => modelCall(ask),
     mail: () => unreachable("LMail"),
     files: new Proxy({}, { get: () => unreachable("LDrive") }) as GatewayDeps["files"],
     // Only the vendor lookup is answered: Lumen is the one vendor this QuirkBooks knows.
@@ -64,6 +73,7 @@ after(async () => {
   server.close();
   await close();
   await closeMemory();
+  await sdk.shutdown();
 });
 
 const STORIES = ["buses", "trams", "ferries"].map((name) => ({
@@ -312,4 +322,22 @@ test("a decision goes into the vendor's note once, written from the approval", a
   });
   const spoofed = await callTool("memory.record_decision", { ...body, args: { approvalId: printed.id } });
   assert.deepEqual(spoofed.result, { note: null, added: false });
+});
+
+test("a model call made by the gateway joins the trace of the run that asked for it", async () => {
+  // The gateway's model calls once landed in Langfuse as loose traces, apart from the run that asked.
+  let traceIdAtModel: string | undefined;
+  modelCall = async () => {
+    traceIdAtModel = trace.getActiveSpan()?.spanContext().traceId;
+    return { content: "{}", toolCalls: [], inputTokens: 1, outputTokens: 1, costUsd: 0 };
+  };
+  const runId = await startRun("invoices");
+  const client = new GatewayClient(base, WORKER);
+  const traceIdOfRun = await trace.getTracer("gateway-test").startActiveSpan("invoice run", async (span) => {
+    await client.model({ runId, company: "bramble", teammate: "invoices" }, { task: "screen", risk: "low", prior: [], messages: [{ role: "user", content: "Hello" }], maxTokens: 64 });
+    span.end();
+    return span.spanContext().traceId;
+  });
+  modelCall = async () => unreachable("a model");
+  assert.equal(traceIdAtModel, traceIdOfRun);
 });

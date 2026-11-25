@@ -1,4 +1,4 @@
-import { observeOpenAI } from "@langfuse/openai";
+import { propagateAttributes, startActiveObservation } from "@langfuse/tracing";
 import OpenAI from "openai";
 import { MODELS, type Tier } from "./models";
 
@@ -30,16 +30,33 @@ export type ModelAnswer = {
 export function createModelClient(apiKey: string) {
   const client = new OpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey, maxRetries: 2, timeout: 120_000 });
 
-  return async function callModel(request: ModelRequest): Promise<ModelAnswer> {
+  async function callModel(request: ModelRequest): Promise<ModelAnswer> {
     const { trace } = request;
-    const observed = observeOpenAI(client, {
-      generationName: `${trace.task} (${request.tier})`,
-      sessionId: trace.runId,
-      userId: `${trace.company}/${trace.teammate}`,
-      tags: [trace.teammate, trace.task, request.tier],
-    });
-    const response = await observed.chat.completions.create({
-      model: MODELS[request.tier].id,
+    const model = MODELS[request.tier].id;
+    // One generation per call, inside the run's trace. OpenRouter's own cost goes on it, so
+    // Langfuse shows what was paid, not a guess from a price list.
+    const attributes = { sessionId: trace.runId, userId: `${trace.company}/${trace.teammate}`, tags: [trace.teammate, trace.task, request.tier] };
+    return propagateAttributes(attributes, () =>
+      startActiveObservation(
+        `${trace.task} (${request.tier})`,
+        async (generation) => {
+          generation.update({ model, input: request.messages, modelParameters: { max_tokens: request.maxTokens } });
+          const answer = await send(request, model);
+          generation.update({
+            output: answer.content ?? answer.toolCalls,
+            usageDetails: { input: answer.inputTokens, output: answer.outputTokens },
+            costDetails: { total: answer.costUsd },
+          });
+          return answer;
+        },
+        { asType: "generation" },
+      ),
+    );
+  }
+
+  async function send(request: ModelRequest, model: string): Promise<ModelAnswer> {
+    const response = await client.chat.completions.create({
+      model,
       messages: request.messages,
       max_tokens: request.maxTokens,
       ...(request.schema ? { response_format: { type: "json_schema", json_schema: { ...request.schema, strict: true } } } : {}),
@@ -61,7 +78,9 @@ export function createModelClient(apiKey: string) {
       outputTokens: usage.completion_tokens,
       costUsd: usage.cost,
     };
-  };
+  }
+
+  return callModel;
 }
 
 // The fast tier does not think. Given any effort, even low, it thought until max_tokens and sent cut-off

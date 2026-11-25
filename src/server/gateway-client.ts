@@ -1,3 +1,4 @@
+import { context, propagation } from "@opentelemetry/api";
 import { z } from "zod";
 import type { ChatMessage } from "./llm";
 import type { Tier } from "./models";
@@ -40,9 +41,12 @@ export class GatewayClient {
   ) {}
 
   private async post<T>(route: string, body: unknown, timeoutMs = 180_000): Promise<T> {
+    const headers: Record<string, string> = { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" };
+    // Sends the run's trace along (a traceparent header), so the gateway's model calls land in it.
+    propagation.inject(context.active(), headers);
     const response = await fetch(new URL(route, this.baseUrl), {
       method: "POST",
-      headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });

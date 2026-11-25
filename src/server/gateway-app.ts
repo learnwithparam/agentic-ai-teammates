@@ -1,3 +1,4 @@
+import { context, propagation, ROOT_CONTEXT } from "@opentelemetry/api";
 import express, { type Express } from "express";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -123,6 +124,8 @@ export function createGatewayApp(deps: GatewayDeps): Express {
   const outbox = new Outbox(pool);
   const app = createApp("gateway");
   app.use(express.json({ limit: "2mb" }));
+  // A call that comes with a run's trace continues it, so one run is one trace in Langfuse.
+  app.use((request, _response, next) => context.with(propagation.extract(ROOT_CONTEXT, request.headers), next));
   const requireScope = apiKeys([
     { name: "worker", scopes: ["model", "tools"], key: deps.tokens.worker },
     { name: "dispatcher", scopes: ["dispatch"], key: deps.tokens.dispatcher },

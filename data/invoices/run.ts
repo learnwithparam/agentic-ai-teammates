@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { startActiveObservation } from "@langfuse/tracing";
 import type { Invoice, Reason } from "../../src/server/checks";
 import { createPool, migrate } from "../../src/server/db";
 import { requireSettings, setting } from "../../src/server/env";
@@ -10,6 +11,7 @@ import { GatewayClient } from "../../src/server/gateway-client";
 import { pdfText } from "../../src/server/pdf-text";
 import { ROUTING_MODES, type RoutingMode } from "../../src/server/router";
 import { Run, type StopReason } from "../../src/server/run";
+import { startTracing } from "../../src/server/tracing";
 import { extractInvoice, screenDocument } from "../../src/server/teammates/invoice-graph";
 import { asWritten, reasonsFor, senderOf } from "./books";
 import { CASES, type InvoiceCase } from "./cases";
@@ -25,7 +27,9 @@ import { fileName } from "./render";
 //
 // It fails when a case would post that should wait, or a clean case would not post.
 
-requireSettings(["DATABASE_URL", "GATEWAY_URL", "GATEWAY_WORKER_TOKEN"]);
+requireSettings(["DATABASE_URL", "GATEWAY_URL", "GATEWAY_WORKER_TOKEN", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL"]);
+// Each case is one trace in Langfuse, holding the model calls the gateway made for it.
+const stopTracing = startTracing("invoices-eval");
 
 // The eval runs as its own teammate, so its spend has its own budget. It has no inbox
 // subscription and is off duty, so nothing wakes it and it gets no daily schedule.
@@ -73,7 +77,11 @@ async function score(mode: RoutingMode, invoice: InvoiceCase): Promise<Score> {
   run.mode = mode;
   const threadId = `eval:${invoice.id}`;
   try {
-    const { outcome, read } = await decide(run, invoice);
+    const { outcome, read } = await startActiveObservation(`${invoice.id} (${mode})`, async (span) => {
+      const decided = await decide(run, invoice);
+      span.update({ output: { outcome: decided.outcome, expected: expectedOf(invoice) } });
+      return decided;
+    });
     const stop: StopReason = outcome.kind === "posted" ? "sent" : outcome.kind === "approval" ? "deferred" : "handed_to_human";
     run.outcome(threadId, stop, `${invoice.id}: ${describe(outcome)}`);
     await run.finish();
@@ -150,6 +158,7 @@ console.log("\n| Routing | Right | Wrong postings | Clean not posted | Read exac
 console.log("| --- | --- | --- | --- | --- | --- | --- |");
 for (const row of rows) console.log(row);
 await pool.end();
+await stopTracing();
 if (failed) {
   console.error("\nA case would post that should wait, or a clean case would not post.");
   process.exit(1);
