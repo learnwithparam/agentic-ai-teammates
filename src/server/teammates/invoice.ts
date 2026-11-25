@@ -73,6 +73,10 @@ export function invoiceTeammate(checkpointer: BaseCheckpointSaver) {
       if (state.values?.source && (state.next.length === 0 || state.next.includes("wait"))) return null;
       if (state.values?.source) await graph.invoke(null, config);
       else await graph.invoke({ ...item.start, text: null, invoice: null, facts: null, reasons: [], findings: null, brief: null, approvalId: null, decision: null, posted: false, result: null }, config);
+    } else if (state.next.length > 0 && !state.next.includes("wait")) {
+      // The decision was taken, then the worker stopped part way. Carry on from the last finished
+      // step; the post's Idempotency-Key makes a post that already landed answer the same again.
+      await graph.invoke(null, config);
     } else {
       if (!state.next.includes("wait")) {
         await run.note("note", "A decision arrived for a thread that is not waiting", { threadId: item.threadId });
