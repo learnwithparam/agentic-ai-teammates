@@ -258,9 +258,14 @@ export function createGatewayApp(deps: GatewayDeps): Express {
 
   // ---------- books.post_bill: the gateway runs the checks itself ----------
 
+  // The one way an invoice is matched to a vendor. The real sender comes first: an address
+  // printed on the invoice proves nothing.
+  function matchVendor(invoice: Invoice, source: InvoiceSource) {
+    return books.findVendor(invoice.vendorName, source.sender ?? invoice.vendorEmail);
+  }
+
   async function bookFacts(invoice: Invoice, source: InvoiceSource) {
-    // The real sender comes first: an address printed on the invoice proves nothing.
-    const vendor = await books.findVendor(invoice.vendorName, source.sender ?? invoice.vendorEmail);
+    const vendor = await matchVendor(invoice, source);
     const purchaseOrder = invoice.poNumber ? await books.purchaseOrder(invoice.poNumber) : null;
     const duplicates = vendor ? await books.bills(vendor.id, invoice.invoiceNumber) : [];
     return { vendor, po: purchaseOrder, duplicateBillId: duplicates[0]?.id ?? null, sender: source.sender };
@@ -410,7 +415,7 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       return { status: "denied", reason: "There is no such invoice approval for this teammate." };
     }
     if (approval.status === "pending" || !approval.decidedAt) return { status: "denied", reason: "Nobody has decided this approval yet." };
-    const { invoice } = TOOLS["books.post_bill"].args.parse(approval.args);
+    const { invoice, source } = TOOLS["books.post_bill"].args.parse(approval.args);
     const checks = approval.reasons.filter((reason): reason is Reason => reason in REASONS);
     const parts = [
       `${approval.decidedAt.slice(0, 10)}:`,
@@ -421,7 +426,7 @@ export function createGatewayApp(deps: GatewayDeps): Express {
     if (approval.decisionNote) parts.push(`Their note: "${safeLine(approval.decisionNote, 160)}"`);
     // The note belongs to the vendor QuirkBooks matches. An invoice that matches none, or one
     // that names a vendor it did not come from, is never written into a real vendor's history.
-    const vendor = await books.findVendor(invoice.vendorName, invoice.vendorEmail);
+    const vendor = await matchVendor(invoice, source);
     if (!vendor) return { status: "done", result: { note: null, added: false } };
     const topic = vendorTopic(vendor.id);
     const { added } = await memory.addLine(scope, topic, parts.join(" "));

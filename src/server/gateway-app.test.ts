@@ -39,7 +39,11 @@ before(async () => {
     books: new Proxy({}, {
       get: (_books, name) => {
         if (name !== "findVendor") return unreachable(`QuirkBooks ${String(name)}`);
-        return async (vendorName: string) => (vendorName === "Lumen Print House" ? { id: "V-007", name: vendorName } : null);
+        // Like QuirkBooks, it matches the address first, then the name.
+        return async (vendorName: string, email: string | null) => {
+          if (email === "billing@lumen.example" || vendorName === "Lumen Print House") return { id: "V-007", name: "Lumen Print House" };
+          return null;
+        };
       },
     }) as GatewayDeps["books"],
     publisher: null,
@@ -235,4 +239,21 @@ test("a decision goes into the vendor's note once, written from the approval", a
   });
   const unmatched = await callTool("memory.record_decision", { ...body, args: { approvalId: stranger.id } });
   assert.deepEqual(unmatched.result, { note: null, added: false });
+
+  // Printing Lumen's address on the invoice does not make it Lumen's: the real sender decides.
+  const printed = await approvals.request({
+    company: "bramble", teammate: "invoices", runId, threadId: "invoice:mail:m-79", tool: "books.post_bill",
+    args: {
+      invoice: { ...invoice, vendorName: "Lumen Print House Ltd", vendorEmail: "billing@lumen.example" },
+      source: { ...source, kind: "mail", id: "m-79", sender: "pay@lumen-billing.example" },
+      brief: null,
+    },
+    amount: 1200, currency: "EUR", title: "Lumen Print House Ltd LP-79", brief: "New vendor.", reasons: ["unknown_vendor"], canAllowAlways: false,
+  });
+  await approvals.decide({
+    company: "bramble", id: printed.id, approve: false, allowAlways: false, note: null,
+    person: { subject: "ravi", name: "Ravi Menon", email: "ravi@bramble.example" },
+  });
+  const spoofed = await callTool("memory.record_decision", { ...body, args: { approvalId: printed.id } });
+  assert.deepEqual(spoofed.result, { note: null, added: false });
 });
