@@ -18,6 +18,7 @@ import { createWebApp } from "./web-app";
 
 const secrets = { lmail: `whsec_${randomBytes(24).toString("base64")}`, ldrive: `whsec_${randomBytes(24).toString("base64")}` };
 const ADA: Person = { subject: "ada-id", email: "ada@bramble.example", name: "Ada Okafor", company: "bramble", roles: ["admin"] };
+const MEI: Person = { subject: "mei-id", email: "mei@bramble.example", name: "Mei Tanaka", company: "bramble", roles: [] };
 const RAVI: Person = { subject: "ravi-id", email: "ravi@bramble.example", name: "Ravi Menon", company: "bramble", roles: ["approver"], approvalLimit: 5000 };
 
 let pool: Pool;
@@ -158,9 +159,19 @@ test("deciding asks OpenFGA with the approval's amount, and a refusal leaves it 
   allow = false;
   const refused = await call(`/api/approvals/${approval.id}/decide`, { method: "POST", body: { approve: true } });
   assert.equal(refused.status, 403);
+  assert.deepEqual(await refused.json(), { error: "This amount is above what you can approve. Ask an admin." });
   assert.deepEqual(asked, [{ relation: "can_decide", object: `approval:${approval.id}`, context: { amount: 7200 } }]);
   const { rows } = await pool.query("SELECT status FROM approvals WHERE id = $1", [approval.id]);
   assert.equal(rows[0].status, "pending");
+});
+
+test("someone who only views is told they cannot decide, not that the amount is too high", async () => {
+  const approval = await pendingApproval(300);
+  signedIn = MEI;
+  allow = false;
+  const refused = await call(`/api/approvals/${approval.id}/decide`, { method: "POST", body: { approve: true } });
+  assert.equal(refused.status, 403);
+  assert.deepEqual(await refused.json(), { error: "You can view approvals, but not decide them." });
 });
 
 test("an allowed decision is recorded, audited and wakes the teammate", async () => {
@@ -183,6 +194,7 @@ test("an approver cannot turn a decision into a standing rule", async () => {
   refused.add("can_configure");
   const response = await call(`/api/approvals/${approval.id}/decide`, { method: "POST", body: { approve: true, allowAlways: true } });
   assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "Only an admin can make this a standing rule." });
   const { rows } = await pool.query("SELECT status FROM approvals WHERE id = $1", [approval.id]);
   assert.equal(rows[0].status, "pending");
 });
@@ -193,6 +205,7 @@ test("an amount in another currency is an admin's decision, whatever the approve
   refused.add("can_configure");
   const response = await call(`/api/approvals/${approval.id}/decide`, { method: "POST", body: { approve: true } });
   assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "An amount in another currency needs an admin." });
   assert.deepEqual(asked.map((question) => question.relation), ["can_configure"]);
   signedIn = ADA;
   refused.clear();

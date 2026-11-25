@@ -56,12 +56,18 @@ export function createWebApp(deps: WebDeps): Express {
 
   const person = (request: express.Request): Person => request.person!;
 
-  async function requireTeammate(who: Person, teammate: string, relation: "can_view" | "can_configure") {
+  async function requireTeammate(who: Person, teammate: string, relation: "can_view" | "can_configure", refusal?: string) {
     const { rows } = await pool.query("SELECT 1 FROM teammates WHERE company = $1 AND id = $2", [who.company, teammate]);
     if (!rows[0]) throw new HttpError(404, "There is no such teammate.");
     if (!(await check(who, relation, { type: "teammate", id: `${who.company}-${teammate}`, company: who.company }))) {
-      throw new HttpError(403, relation === "can_view" ? "You cannot see this teammate." : "Only an admin can change this teammate.");
+      throw new HttpError(403, refusal ?? (relation === "can_view" ? "You cannot see this teammate." : "Only an admin can change this teammate."));
     }
+  }
+
+  // OpenFGA decides; the roles only choose the words. Someone who only views is not told about a limit.
+  function decideRefusal(who: Person): string {
+    const decides = who.roles.includes("approver") || who.roles.includes("admin");
+    return decides ? "This amount is above what you can approve. Ask an admin." : "You can view approvals, but not decide them.";
   }
 
   app.get("/api/me", (request, response) => {
@@ -146,11 +152,11 @@ export function createWebApp(deps: WebDeps): Express {
     if (!approval) throw new HttpError(404, "There is no such approval.");
     // An approver's limit is in the company's currency, so an amount in another currency is an admin's call.
     const foreign = approval.currency !== null && approval.currency !== COMPANIES[who.company].currency;
-    if (foreign) await requireTeammate(who, approval.teammate, "can_configure");
+    if (foreign) await requireTeammate(who, approval.teammate, "can_configure", "An amount in another currency needs an admin.");
     const allowed = await check(who, "can_decide", { type: "approval", id, company: approval.company }, { amount: approval.amount ?? 0 });
-    if (!allowed) throw new HttpError(403, "This amount is above what you can approve. Ask an admin.");
+    if (!allowed) throw new HttpError(403, decideRefusal(who));
     // Allow always writes a standing rule, which is a change to the teammate.
-    if (body.allowAlways) await requireTeammate(who, approval.teammate, "can_configure");
+    if (body.allowAlways) await requireTeammate(who, approval.teammate, "can_configure", "Only an admin can make this a standing rule.");
     const decided = await approvals.decide({ company: who.company, id, person: who, approve: body.approve, allowAlways: body.allowAlways, note: body.note });
     response.json(publicApproval(decided));
   });
