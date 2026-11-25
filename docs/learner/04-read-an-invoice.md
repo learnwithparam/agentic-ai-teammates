@@ -16,7 +16,7 @@ The stack and Langfuse are running. You can sign in to Langfuse at http://localh
 
 ## How it works
 
-The invoice teammate is a LangGraph graph in `src/server/teammates/invoice-graph.ts`.
+The invoice teammate is a LangGraph graph in `src/server/teammates/invoice/graph.ts`.
 Each invoice is its own thread, saved in Postgres after every node. So a run can stop and pick up days later.
 
 | Node | What it does |

@@ -1,4 +1,4 @@
-import { Card } from "../tools";
+import { Card } from "../tools/shapes";
 import type { Story } from "./sources";
 
 // The rules for a day's edition that need no model. The graph runs them before it publishes,

@@ -12,7 +12,7 @@ import { pdfText } from "../../src/server/pdf-text";
 import { ROUTING_MODES, type RoutingMode } from "../../src/server/router";
 import { Run, type StopReason } from "../../src/server/run";
 import { startTracing } from "../../src/server/tracing";
-import { extractInvoice, screenDocument } from "../../src/server/teammates/invoice-graph";
+import { extractInvoice, screenDocument } from "../../src/server/teammates/invoice/graph";
 import { asWritten, reasonsFor, senderOf } from "./books";
 import { CASES, type InvoiceCase } from "./cases";
 import { fileName } from "./render";

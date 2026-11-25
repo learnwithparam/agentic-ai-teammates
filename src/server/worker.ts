@@ -1,10 +1,10 @@
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { createPool, describeError, migrate } from "./db";
+import { ensureTeammates } from "./teammates/ensure";
 import { requireSettings, setting } from "./env";
 import { GatewayClient } from "./gateway-client";
 import { Inbox, listenForEvents } from "./inbox";
-import { invoiceTeammate } from "./teammates/invoice";
-import { newsTeammate } from "./teammates/news";
+import { TEAMMATES } from "./teammates/registry";
 import { startTracing } from "./tracing";
 import { workOnce } from "./worker-loop";
 
@@ -19,6 +19,7 @@ const POLL_MS = 5000;
 const stopTracing = startTracing("worker");
 const pool = createPool(setting("DATABASE_URL"));
 await migrate(pool);
+await ensureTeammates(pool);
 const checkpointer = new PostgresSaver(pool);
 await checkpointer.setup();
 
@@ -26,7 +27,7 @@ const options = {
   pool,
   gateway: new GatewayClient(setting("GATEWAY_URL"), setting("GATEWAY_WORKER_TOKEN")),
   inbox: new Inbox(pool),
-  kinds: { invoice: invoiceTeammate(checkpointer), news: newsTeammate(checkpointer) },
+  kinds: Object.fromEntries(TEAMMATES.map((teammate) => [teammate.kind, teammate.work(checkpointer)])),
 };
 
 let stopping = false;

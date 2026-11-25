@@ -7,6 +7,7 @@ import { z } from "zod";
 import { HttpError } from "../../apps/shared/server";
 import type { Inbox } from "./inbox";
 import { COMPANIES } from "./people";
+import { listeningKinds } from "./teammates/registry";
 
 // The webhook handlers. A handler checks the signature, stores the event in the inbox and
 // answers at once. It never runs a teammate and never reads the message: the worker does that.
@@ -56,7 +57,7 @@ export function createHooksRouter(deps: { pool: Pool; inbox: Inbox; secrets: { l
     const company = companyOf(String(request.params.company));
     const notice = MailNotice.parse(verify(lmail, request.body, request.headers));
     if (notice.emailAddress.toLowerCase() !== company.accountsMailbox) throw new HttpError(422, "This mailbox is not the company's accounts mailbox.");
-    const stored = await toTeammates(deps, company.alias, "invoice", {
+    const stored = await toTeammates(deps, company.alias, {
       source: "lmail",
       sourceId: String(request.header("webhook-id")),
       type: "mail.received",
@@ -77,7 +78,7 @@ export function createHooksRouter(deps: { pool: Pool; inbox: Inbox; secrets: { l
       response.status(200).json({ stored: 0 });
       return;
     }
-    const stored = await toTeammates(deps, company.alias, "invoice", {
+    const stored = await toTeammates(deps, company.alias, {
       source: "ldrive",
       sourceId: `${channelId}:${request.header("X-Goog-Message-Number") ?? ""}`,
       type: "drive.changed",
@@ -95,7 +96,7 @@ export function createHooksRouter(deps: { pool: Pool; inbox: Inbox; secrets: { l
       response.status(200).json({ stored: 0 });
       return;
     }
-    const stored = await toTeammates(deps, company.alias, "invoice", {
+    const stored = await toTeammates(deps, company.alias, {
       source: "gdrive",
       sourceId: `${channelId}:${request.header("X-Goog-Message-Number") ?? ""}`,
       type: "drive.changed",
@@ -117,7 +118,7 @@ function addGmailHook(router: Router, deps: { pool: Pool; inbox: Inbox; google: 
     const push = PushBody.parse(request.body);
     const notice = MailNotice.parse(JSON.parse(Buffer.from(push.message.data, "base64").toString("utf8")));
     if (notice.emailAddress.toLowerCase() !== deps.google.mailbox.toLowerCase()) throw new HttpError(422, "This mailbox is not the company's accounts mailbox.");
-    const stored = await toTeammates(deps, company.alias, "invoice", {
+    const stored = await toTeammates(deps, company.alias, {
       source: "gmail",
       sourceId: push.message.messageId,
       type: "mail.received",
@@ -167,8 +168,10 @@ function verify(signer: Webhook, body: unknown, headers: Record<string, string |
 }
 
 // One notice wakes every teammate of that kind. Returns how many new events were stored.
-async function toTeammates(deps: { pool: Pool; inbox: Inbox }, company: string, kind: string, event: { source: string; sourceId: string; type: "mail.received" | "drive.changed"; payload: unknown }): Promise<number> {
-  const { rows } = await deps.pool.query<{ id: string }>("SELECT id FROM teammates WHERE company = $1 AND kind = $2", [company, kind]);
+// Stores the event in the inbox of every teammate whose definition listens to its source.
+async function toTeammates(deps: { pool: Pool; inbox: Inbox }, company: string, event: { source: string; sourceId: string; type: "mail.received" | "drive.changed"; payload: unknown }): Promise<number> {
+  const kinds = listeningKinds(event.type === "mail.received" ? "mail" : "drive");
+  const { rows } = await deps.pool.query<{ id: string }>("SELECT id FROM teammates WHERE company = $1 AND kind = ANY($2)", [company, kinds]);
   let stored = 0;
   for (const mate of rows) {
     const result = await deps.inbox.receive({ company, teammate: mate.id, ...event });

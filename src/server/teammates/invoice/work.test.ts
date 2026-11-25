@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { MemorySaver } from "@langchain/langgraph";
 import type { Pool } from "pg";
-import { GatewayError, type GatewayClient } from "../gateway-client";
-import type { InboxEvent } from "../inbox";
-import { Run, RUN_CAPS } from "../run";
-import { testDatabase } from "../test-database";
-import { invoiceGraph } from "./invoice-graph";
-import { invoiceTeammate } from "./invoice";
+import { GatewayError, type GatewayClient } from "../../gateway-client";
+import type { InboxEvent } from "../../inbox";
+import { Run, RUN_CAPS } from "../../run";
+import { testDatabase } from "../../test-database";
+import { invoiceGraph } from "./graph";
+import { invoiceTeammate } from "./work";
 
 // A person approved a bill, then the worker died while it posted. The decision comes again on
 // the retry, and the thread must finish. A live run once dropped it as "not waiting".

@@ -1,6 +1,7 @@
 import { listen } from "../../apps/shared/server";
 import { QuirkBooks } from "./adapters/quirkbooks";
 import { createPool, migrate } from "./db";
+import { ensureTeammates } from "./teammates/ensure";
 import { optionalSetting, requireSettings, setting } from "./env";
 import { createGatewayApp } from "./gateway-app";
 import { createModelClient } from "./llm";
@@ -25,6 +26,7 @@ requireSettings([
 const stopTracing = startTracing("gateway");
 const pool = createPool(setting("DATABASE_URL"));
 await migrate(pool);
+await ensureTeammates(pool);
 
 const services = chosenServices();
 const { mail, files } = openSources(pool, services);

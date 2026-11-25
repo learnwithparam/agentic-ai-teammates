@@ -16,7 +16,7 @@ The stack is running and you can sign in to Mission Control. The news sources ar
 
 ## How it works
 
-The news teammate is a graph in `src/server/teammates/news-graph.ts`:
+The news teammate is a graph in `src/server/teammates/news/graph.ts`:
 
 | Node | What it does |
 | --- | --- |
@@ -74,7 +74,7 @@ Swipe or use the arrow keys to move through the day.
 
 The gateway's check is the last line between an invented link and the public page.
 
-1. Open `src/server/gateway-app.ts` and find `if (problems.length) return { status: "denied"` in `publishTool`.
+1. Open `src/server/tools/news.ts` and find `if (problems.length) return { deny` in the guard of `news.publish`.
 2. Delete that line.
 3. Run `npx tsx --test src/server/gateway-app.test.ts`. This test in `src/server/gateway-app.test.ts` fails:
 

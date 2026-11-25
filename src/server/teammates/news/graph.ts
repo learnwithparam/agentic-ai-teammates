@@ -1,12 +1,12 @@
 import { Annotation, type BaseCheckpointSaver, END, interrupt, START, StateGraph } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { z } from "zod";
-import { INSTRUCTIONS } from "../memory";
-import { modelSchema } from "../model-schema";
-import { dedupe, EDITION_SIZE, editionProblems } from "../news/edition";
-import type { SourceReport, Story } from "../news/sources";
-import type { Run, StopReason } from "../run";
-import type { Card } from "../tools";
+import { INSTRUCTIONS } from "../../memory";
+import { modelSchema } from "../../model-schema";
+import { dedupe, EDITION_SIZE, editionProblems } from "../../news/edition";
+import type { SourceReport, Story } from "../../news/sources";
+import type { Run, StopReason } from "../../run";
+import type { Card } from "../../tools";
 
 // The news teammate's day, as one LangGraph graph. The roles a newsroom has are nodes, not
 // separate agents: only "select" and "write" call a model, and every other step is plain code.

@@ -1,11 +1,11 @@
 import { Command, type BaseCheckpointSaver } from "@langchain/langgraph";
 import { z } from "zod";
-import type { InboxEvent } from "../inbox";
-import { COMPANIES } from "../people";
-import { CapReached, type Run } from "../run";
-import { type Decision, FRESH_STATE, newsGraph, type Result } from "./news-graph";
-import { handleMessages } from "./messages";
-import { companyDay, handleTimers } from "./timed";
+import type { InboxEvent } from "../../inbox";
+import { COMPANIES } from "../../people";
+import { CapReached, type Run } from "../../run";
+import { type Decision, FRESH_STATE, newsGraph, type Result } from "./graph";
+import { handleMessages } from "../messages";
+import { companyDay, handleTimers } from "../timed";
 
 // The news teammate. Its "edition" timer starts the day's graph, one thread per day, and an
 // approval decision resumes the day that asked. Its other timers are the shared ones.

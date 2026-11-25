@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MemorySaver } from "@langchain/langgraph";
-import { newsGraph } from "../teammates/news-graph";
+import { newsGraph } from "../teammates/news/graph";
 import { articleText, isPublicAddress, readArticle } from "./article";
 import { canonicalUrl, dedupe, EDITION_SIZE, editionProblems } from "./edition";
 import { feedStories, gdeltStories, hackerNewsStory, type Story } from "./sources";

@@ -1,11 +1,11 @@
 import { Command, type BaseCheckpointSaver } from "@langchain/langgraph";
 import { z } from "zod";
-import type { InboxEvent } from "../inbox";
-import { CapReached, type Run } from "../run";
-import type { InvoiceSource } from "../tools";
-import { type Decision, invoiceGraph, type Result } from "./invoice-graph";
-import { handleMessages } from "./messages";
-import { handleTimers } from "./timed";
+import type { InboxEvent } from "../../inbox";
+import { CapReached, type Run } from "../../run";
+import type { InvoiceSource } from "../../tools";
+import { type Decision, invoiceGraph, type Result } from "./graph";
+import { handleMessages } from "../messages";
+import { handleTimers } from "../timed";
 
 // The invoice teammate. It turns a batch of inbox events into work: each PDF or invoice email
 // is one thread of the invoice graph, and an approval decision resumes the thread that asked.

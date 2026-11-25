@@ -30,11 +30,11 @@ export async function workOnce(options: WorkerOptions): Promise<Settled[]> {
 export async function workInbox(options: WorkerOptions, inbox: Inbox, company: string, teammate: string): Promise<Settled | null> {
   const { pool, gateway } = options;
   const kind = await kindOf(pool, company, teammate);
-  const work = kind ? options.kinds[kind] : undefined;
-  if (!work) return null;
+  if (!kind) return null;
   const runId = randomUUID();
   const events = await inbox.claim(company, teammate, runId);
   if (!events) return null;
+  const work = options.kinds[kind] ?? noCodeFor(kind);
 
   return propagateAttributes({ sessionId: runId, userId: `${company}/${teammate}` }, () =>
     startActiveObservation(`${teammate} run`, async (span) => {
@@ -61,6 +61,14 @@ export async function workInbox(options: WorkerOptions, inbox: Inbox, company: s
       }
     }),
   );
+}
+
+// A teammate row whose kind has no code would leave its events waiting forever. Instead its run
+// ends handed to a person, saying why, and its events are settled.
+function noCodeFor(kind: string): Teammate {
+  return async (run, events) => {
+    for (const event of events) run.outcome(`event:${event.id}`, "handed_to_human", `There is no teammate code for the kind "${kind}", so nothing read this ${event.type} event.`);
+  };
 }
 
 async function kindOf(pool: Pool, company: string, teammate: string): Promise<string | null> {

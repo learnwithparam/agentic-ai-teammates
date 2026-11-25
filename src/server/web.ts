@@ -1,6 +1,7 @@
 import { listen, servePage } from "../../apps/shared/server";
 import { createAuth } from "./auth";
 import { createPool, migrate } from "./db";
+import { ensureTeammates } from "./teammates/ensure";
 import { requireSettings, setting } from "./env";
 import { recordMember } from "./members";
 import { openFgaCheck } from "./permissions";
@@ -21,6 +22,7 @@ requireSettings([
 
 const pool = createPool(setting("DATABASE_URL"));
 await migrate(pool);
+await ensureTeammates(pool);
 
 const auth = await createAuth({
   pool,

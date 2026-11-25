@@ -1,4 +1,5 @@
 import { createPool, describeError, migrate } from "./db";
+import { ensureTeammates } from "./teammates/ensure";
 import { requireSettings, setting } from "./env";
 import { ensureStandingSchedules } from "./scheduler-loop";
 import { fireDue } from "./timers";
@@ -13,6 +14,7 @@ const POLL_MS = 5000;
 
 const pool = createPool(setting("DATABASE_URL"));
 await migrate(pool);
+await ensureTeammates(pool);
 await ensureStandingSchedules(pool);
 
 let stopping = false;

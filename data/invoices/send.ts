@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import nodemailer from "nodemailer";
 import { requireSettings, setting } from "../../src/server/env";
-import { INVOICE_FOLDER } from "../../src/server/teammates/invoice";
+import { INVOICE_FOLDER } from "../../src/server/teammates/invoice/work";
 import { CASES } from "./cases";
 import { fileName } from "./render";
 

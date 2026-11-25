@@ -5,6 +5,7 @@ import { after, before, test } from "node:test";
 import { trace } from "@opentelemetry/api";
 import { NodeSDK, tracing } from "@opentelemetry/sdk-node";
 import type { Pool } from "pg";
+import { handleErrors } from "../../apps/shared/server";
 import { Approvals } from "./approvals";
 import { createGatewayApp, type GatewayDeps } from "./gateway-app";
 import { GatewayClient } from "./gateway-client";
@@ -12,7 +13,9 @@ import type { CallModel } from "./llm";
 import { MEMBER_FRESH_DAYS, recordMember } from "./members";
 import type { Memory } from "./memory";
 import { setRule } from "./policy";
+import { TEAMMATES } from "./teammates/registry";
 import { testDatabase } from "./test-database";
+import { type ToolName, TOOLS } from "./tools";
 import type { NewsShelf } from "./news-shelf";
 import { testMemory, testNewsShelf } from "./test-memory";
 
@@ -69,7 +72,8 @@ before(async () => {
     },
     tokens: { worker: WORKER, dispatcher: DISPATCHER },
   };
-  server = createGatewayApp(deps).listen(0);
+  // The same error handler listen() adds, so a refusal reads as the JSON a worker gets.
+  server = createGatewayApp(deps).use(handleErrors).listen(0);
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("The gateway did not start.");
   base = `http://127.0.0.1:${address.port}`;
@@ -118,6 +122,16 @@ async function callTool(tool: string, body: Record<string, unknown>) {
   });
   assert.equal(response.status, 200, await response.clone().text());
   return response.json();
+}
+
+async function toolStatus(tool: string, body: Record<string, unknown>) {
+  const response = await fetch(`${base}/tools/${tool}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${WORKER}` },
+    body: JSON.stringify(body),
+  });
+  await response.body?.cancel();
+  return response.status;
 }
 
 async function outboxFor(runId: string) {
@@ -299,7 +313,8 @@ test("a decision goes into the vendor's note once, written from the approval", a
 
   assert.equal((await callTool("memory.record_decision", body)).status, "denied");
   const newsRun = await startRun("news");
-  assert.equal((await callTool("memory.record_decision", { ...body, runId: newsRun, teammate: "news" })).status, "denied");
+  // memory.record_decision is not one of the news teammate's tools, so the gateway refuses it first.
+  assert.equal(await toolStatus("memory.record_decision", { ...body, runId: newsRun, teammate: "news" }), 403);
 
   await approvals.decide({
     company: "bramble", id: approval.id, approve: false, allowAlways: false, note: "Call them first: https://evil.example/pay",
@@ -362,4 +377,17 @@ test("a model call made by the gateway joins the trace of the run that asked for
   });
   modelCall = async () => unreachable("a model");
   assert.equal(traceIdAtModel, traceIdOfRun);
+});
+
+test("every teammate is refused every tool its definition does not list, and the refusal is a step", async () => {
+  for (const teammate of TEAMMATES) {
+    const runId = await startRun(teammate.id);
+    const refused = Object.keys(TOOLS).filter((tool) => !teammate.tools.includes(tool as ToolName));
+    for (const tool of refused) {
+      const status = await toolStatus(tool, { runId, company: "bramble", teammate: teammate.id, threadId: "allowlist", args: {} });
+      assert.equal(status, 403, `${teammate.kind} called ${tool}`);
+    }
+    const { rows } = await pool.query("SELECT count(*)::int AS n FROM run_steps WHERE run_id = $1 AND title LIKE '%not this teammate''s tool'", [runId]);
+    assert.equal(rows[0].n, refused.length);
+  }
 });

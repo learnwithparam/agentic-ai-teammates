@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MemorySaver } from "@langchain/langgraph";
-import { invoiceGraph } from "./invoice-graph";
+import { invoiceGraph } from "./graph";
 
 // LangGraph checks a graph's shape only when it is built, which the type checker cannot see.
 // A node that shares a name with a state field once stopped the worker at start.

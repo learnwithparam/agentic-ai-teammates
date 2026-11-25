@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import { type Decision, TOOLS, type ToolName } from "./tools";
+import { type Decision, toolDefinition, type ToolName } from "./tools";
 
 // A tool's policy for one teammate: a standing rule a person set, or the tool's own default.
 // "Allow always" on an approval card writes a rule here. It never goes into a teammate's memory,
@@ -10,7 +10,7 @@ export async function decisionFor(pool: Pool, company: string, teammate: string,
     "SELECT decision FROM tool_rules WHERE company = $1 AND teammate = $2 AND tool = $3",
     [company, teammate, tool],
   );
-  return rows[0]?.decision ?? TOOLS[tool].decision;
+  return rows[0]?.decision ?? toolDefinition(tool).decision;
 }
 
 export async function setRule(pool: Pool, rule: { company: string; teammate: string; tool: ToolName; decision: Decision; setBy: string }) {
