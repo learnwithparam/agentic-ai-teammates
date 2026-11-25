@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { HttpError } from "../../apps/shared/server";
 import { inTransaction } from "./db";
+import { cancelTimer, setTimer } from "./timers";
 import { payloadHash } from "./canonical";
 import { setRule } from "./policy";
 import { isToolName, type ToolName } from "./tools";
@@ -77,6 +78,13 @@ function toApproval(row: Record<string, unknown>): Approval {
   };
 }
 
+export const REMIND_AFTER_HOURS = 24;
+
+// The timer that reminds people about one approval.
+export function reminderName(approvalId: string): string {
+  return `remind:${approvalId}`;
+}
+
 export class Approvals {
   constructor(private readonly pool: Pool) {}
 
@@ -100,6 +108,9 @@ export class Approvals {
           JSON.stringify(approval.reasons), approval.canAllowAlways,
         ],
       );
+      // If nobody decides within a day, the teammate reminds the people who can.
+      const remindAt = new Date(Date.now() + REMIND_AFTER_HOURS * 3_600_000);
+      await setTimer(client, approval.company, approval.teammate, reminderName(rows[0].id), { at: remindAt }, { approvalId: rows[0].id });
       return toApproval(rows[0]);
     });
   }
@@ -146,6 +157,7 @@ export class Approvals {
         input.company, input.person.email, `approval.${status}`, input.id,
         JSON.stringify({ tool: current.tool, title: current.title, amount: current.amount, allowAlways: input.allowAlways, note: input.note }),
       ]);
+      await cancelTimer(client, current.company, current.teammate, reminderName(input.id));
       // The decision is an event in the teammate's inbox. The worker picks it up and resumes the run.
       await client.query(
         `INSERT INTO inbox_events (company, teammate, source, source_id, type, payload)

@@ -2,6 +2,7 @@ import { listen, servePage } from "../../apps/shared/server";
 import { createAuth } from "./auth";
 import { createPool, migrate } from "./db";
 import { requireSettings, setting } from "./env";
+import { recordMember } from "./members";
 import { openFgaCheck } from "./permissions";
 import { createWebApp } from "./web-app";
 
@@ -25,6 +26,7 @@ const auth = await createAuth({
   mountPath: "/api/auth",
   cookieName: "mission_control_session",
   audience: setting("OIDC_AUDIENCE"),
+  onSignIn: (person) => recordMember(pool, person),
 });
 
 const app = createWebApp({

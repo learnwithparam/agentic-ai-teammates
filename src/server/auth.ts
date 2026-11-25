@@ -32,6 +32,8 @@ export type AuthSettings = {
   cookieName: string;
   // The audience access tokens must carry. Only Mission Control's API asks for one.
   audience?: string;
+  // Runs after each sign-in, with the person the token names.
+  onSignIn?: (person: Person) => Promise<void>;
 };
 
 type StoredTokens = { access_token: string; refresh_token?: string; id_token?: string; expires_at: number };
@@ -171,6 +173,7 @@ export async function createAuth(settings: AuthSettings) {
       expectedNonce: rows[0].nonce,
     });
     const person = await verifyAccessToken(tokens.access_token, keys, settings.issuer, settings.audience);
+    await settings.onSignIn?.(person);
     const sessionId = randomBytes(32).toString("base64url");
     await pool.query(
       `INSERT INTO sessions (id, subject, tokens, expires_at) VALUES ($1, $2, '{}', now() + make_interval(hours => ${SESSION_HOURS}))`,

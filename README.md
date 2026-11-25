@@ -70,16 +70,20 @@ Mission Control reaches them only through their APIs, with keys that `npm run se
 
 ## Start Mission Control
 
-Mission Control is three processes. Start each in its own terminal:
+Mission Control is five processes. Start each in its own terminal:
 
 ```bash
 npm run gateway
 npm run worker
+npm run scheduler
+npm run dispatcher
 npm run web
 ```
 
 - **The gateway** holds every key. It routes each model call, checks each tool call and keeps the spend.
 - **The worker** wakes on each new inbox event and runs the teammate. It holds no key.
+- **The scheduler** turns timers into inbox events. A reminder fires when an approval waits a day. A summary goes out at six on working evenings.
+- **The dispatcher** sends what the outbox holds. It spaces out sends and retries the ones that can work later.
 - **The web process** (http://localhost:8787) takes the apps' signed notices and serves the board.
 
 ## Send Bramble some invoices

@@ -119,6 +119,21 @@ export const TOOLS = {
     decision: "allow",
     readOnly: false,
   },
+  // The two team tools write only to the company's own people who decide approvals. The gateway
+  // picks the recipients, so a teammate cannot send them anywhere else.
+  "team.remind": {
+    description: "Remind the people who decide approvals that one is still waiting.",
+    args: z.object({ approvalId: z.uuid() }),
+    decision: "allow",
+    readOnly: false,
+  },
+  "team.digest": {
+    description: "Send the people who decide approvals the day's summary of this teammate's work.",
+    // The gateway writes the summary from its own records, so a teammate cannot put words in it.
+    args: z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+    decision: "allow",
+    readOnly: false,
+  },
 } satisfies Record<string, ToolDefinition>;
 
 export type ToolName = keyof typeof TOOLS;

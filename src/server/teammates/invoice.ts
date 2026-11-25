@@ -4,6 +4,7 @@ import type { InboxEvent } from "../inbox";
 import { CapReached, type Run } from "../run";
 import type { InvoiceSource } from "../tools";
 import { type Decision, invoiceGraph, type Result } from "./invoice-graph";
+import { handleTimers } from "./timed";
 
 // The invoice teammate. It turns a batch of inbox events into work: each PDF or invoice email
 // is one thread of the invoice graph, and an approval decision resumes the thread that asked.
@@ -43,9 +44,10 @@ export function invoiceTeammate(checkpointer: BaseCheckpointSaver) {
     return run;
   });
 
-  return async function work(run: Run, events: InboxEvent[]) {
+  return async function work(run: Run, batch: InboxEvent[]) {
     runs.set(run.ref.runId, run);
     try {
+      const events = await handleTimers(run, batch);
       for (const item of await plan(run, events)) {
         try {
           const result = await runThread(run, item);

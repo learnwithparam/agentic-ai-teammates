@@ -208,7 +208,8 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
   // The gateway posts only when its own checks pass. Otherwise it answers with an approval.
   async function post(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
     const run = runOf(config);
-    const result = await run.tool(threadOf(config), "books.post_bill", { invoice: state.invoice!, source: state.source, brief: state.brief });
+    const result = await postOrRefusal(() => run.tool(threadOf(config), "books.post_bill", { invoice: state.invoice!, source: state.source, brief: state.brief }));
+    if (typeof result === "string") return refused(state, result);
     if (result.status === "needs_approval") return { approvalId: result.approvalId };
     return postResult(state, result);
   }
@@ -222,7 +223,10 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
   async function postApproved(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
     const run = runOf(config);
     if (state.decision!.status === "denied") return { result: { outcome: "nothing_to_send", note: `${label(state)} was denied by a person.` } };
-    const result = await run.tool(threadOf(config), "books.post_bill", { invoice: state.invoice!, source: state.source, brief: state.brief }, state.approvalId!);
+    const result = await postOrRefusal(() =>
+      run.tool(threadOf(config), "books.post_bill", { invoice: state.invoice!, source: state.source, brief: state.brief }, state.approvalId!),
+    );
+    if (typeof result === "string") return refused(state, result);
     return postResult(state, result);
   }
 
@@ -266,6 +270,22 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
     .addEdge("post_approved", "notify")
     .addEdge("notify", END)
     .compile({ checkpointer });
+}
+
+// QuirkBooks can refuse a bill, for example when its lines do not add up. Asking again gets the
+// same answer, so the thread ends and a person takes it. A failure a retry can fix still throws.
+// The answer is the tool's result, or the reason QuirkBooks gave.
+async function postOrRefusal(post: () => ReturnType<Run["tool"]>): Promise<Awaited<ReturnType<Run["tool"]>> | string> {
+  try {
+    return await post();
+  } catch (error) {
+    if (!(error instanceof GatewayError) || error.retryable) throw error;
+    return error.message;
+  }
+}
+
+function refused(state: State, reason: string): Partial<State> {
+  return { result: { outcome: "handed_to_human", note: `QuirkBooks refused ${label(state)}: ${reason}` } };
 }
 
 function postResult(state: State, result: Awaited<ReturnType<Run["tool"]>>): Partial<State> {

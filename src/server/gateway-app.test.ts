@@ -5,6 +5,7 @@ import { after, before, test } from "node:test";
 import type { Pool } from "pg";
 import { Approvals } from "./approvals";
 import { createGatewayApp, type GatewayDeps } from "./gateway-app";
+import { recordMember } from "./members";
 import { setRule } from "./policy";
 import { testDatabase } from "./test-database";
 
@@ -106,4 +107,56 @@ test("a standing rule to approve the news makes it wait for a person, with nothi
   } finally {
     await pool.query("DELETE FROM tool_rules WHERE teammate = 'news'");
   }
+});
+
+// The team tools write only to the company's own people who decide, and only from Mission
+// Control's records. A viewer never gets one, and a decided approval is never chased.
+test("a reminder goes to each person who can decide, once, and stops once the approval is decided", async () => {
+  const runId = await startRun("invoices");
+  const approvals = new Approvals(pool);
+  const approval = await approvals.request({
+    company: "bramble", teammate: "invoices", runId, threadId: "invoice:drive:file-31", tool: "books.post_bill", args: { n: 31 },
+    amount: 900, currency: "EUR", title: "Kestrel Freelance KF-31", brief: "The bank details changed.", reasons: ["bank_changed"], canAllowAlways: false,
+  });
+  const body = { runId, company: "bramble", teammate: "invoices", threadId: "timer:remind", args: { approvalId: approval.id } };
+
+  assert.equal((await callTool("team.remind", body)).status, "denied");
+
+  const person = { company: "bramble", name: "", approvalLimit: undefined };
+  await recordMember(pool, { ...person, subject: "ada", email: "ada@bramble.example", name: "Ada Okafor", roles: ["admin"] });
+  await recordMember(pool, { ...person, subject: "ravi", email: "ravi@bramble.example", name: "Ravi Menon", roles: ["approver"] });
+  await recordMember(pool, { ...person, subject: "mei", email: "mei@bramble.example", name: "Mei Tan", roles: [] });
+
+  assert.deepEqual((await callTool("team.remind", body)).result, { queued: 2 });
+  assert.deepEqual((await callTool("team.remind", body)).result, { queued: 2 });
+  const { rows } = await pool.query("SELECT payload->>'to' AS to, payload->>'subject' AS subject, status FROM outbox WHERE run_id = $1 ORDER BY 1", [runId]);
+  assert.deepEqual(rows, [
+    { to: "ada@bramble.example", subject: "Still waiting: Kestrel Freelance KF-31", status: "queued" },
+    { to: "ravi@bramble.example", subject: "Still waiting: Kestrel Freelance KF-31", status: "queued" },
+  ]);
+
+  await approvals.decide({ company: "bramble", id: approval.id, person: { subject: "ravi", name: "Ravi Menon", email: "ravi@bramble.example" }, approve: false, allowAlways: false, note: null });
+  assert.deepEqual((await callTool("team.remind", body)).result, { queued: 0, note: "The approval was already decided." });
+});
+
+test("the digest is written from the day's runs, not by the teammate", async () => {
+  const runId = await startRun("invoices");
+  await pool.query(
+    `INSERT INTO runs (id, company, teammate, status, stop_reason, summary, finished_at) VALUES
+       ($1, 'bramble', 'invoices', 'finished', 'sent', 'Posted LP-770.', '2026-11-24T10:00:00Z'),
+       ($2, 'bramble', 'invoices', 'finished', 'handed_to_human', 'QuirkBooks refused LP-771.', '2026-11-24T11:00:00Z'),
+       ($3, 'bramble', 'invoices', 'finished', 'sent', 'Posted on another day.', '2026-11-23T10:00:00Z')`,
+    [randomUUID(), randomUUID(), randomUUID()],
+  );
+  await new Approvals(pool).request({
+    company: "bramble", teammate: "invoices", runId, threadId: "invoice:drive:file-32", tool: "books.post_bill", args: { n: 32 },
+    amount: 640, currency: "EUR", title: "Harbor Lane Studios HL-32", brief: "No purchase order.", reasons: ["po_missing"], canAllowAlways: false,
+  });
+  await callTool("team.digest", { runId, company: "bramble", teammate: "invoices", threadId: "timer:digest", args: { day: "2026-11-24" } });
+  const { rows } = await pool.query("SELECT payload->>'text' AS text FROM outbox WHERE run_id = $1 LIMIT 1", [runId]);
+  const text: string = rows[0].text;
+  assert.match(text, /- Handed to a person: 1\n- Done: 1\n/);
+  assert.match(text, /QuirkBooks refused LP-771\./);
+  assert.doesNotMatch(text, /another day/);
+  assert.match(text, /Waiting for your decision:\n- Harbor Lane Studios HL-32/);
 });

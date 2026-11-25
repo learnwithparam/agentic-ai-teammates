@@ -5,7 +5,8 @@ export class ServiceError extends Error {
   constructor(
     readonly service: string,
     readonly status: number,
-    detail: string,
+    // What the service said, without who said it or the status. A person can read this one.
+    readonly detail: string,
   ) {
     super(`${service} answered ${status}: ${detail}`);
   }

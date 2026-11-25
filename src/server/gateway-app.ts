@@ -6,6 +6,7 @@ import { createApp, HttpError } from "../../apps/shared/server";
 import { ServiceError } from "./adapters/http";
 import type { Accounting, FileSource, MailSource } from "./adapters/types";
 import { Approvals } from "./approvals";
+import { deciders } from "./members";
 import { parseJsonText, payloadHash } from "./canonical";
 import { checkInvoice, type Invoice, type Reason, REASONS, PO_TOLERANCE } from "./checks";
 import { GitHubError, type GitHubPublisher } from "./github";
@@ -17,6 +18,7 @@ import { pdfText } from "./pdf-text";
 import { decisionFor } from "./policy";
 import { FAST_TASKS, type Outcome, route, ROUTING_MODES, STRONG_TASKS, type Task } from "./router";
 import { budgetLeft, recordSpend } from "./spend";
+import { digestMail, reminderMail } from "./team-mail";
 import { type Card, type InvoiceSource, isToolName, modelToolSpec, type ToolArgs, type ToolName, type ToolResult, TOOLS } from "./tools";
 
 // The gateway: the permissions primitive. It holds every credential (the OpenRouter key and the
@@ -365,6 +367,33 @@ export function createGatewayApp(deps: GatewayDeps): Express {
     return deferToPerson(scope, "news.publish", args, { title: `News for ${args.day}`, brief: why, reasons: [why], canAllowAlways: true });
   }
 
+  // A note to the company's own people who decide approvals. It goes out even when the teammate
+  // is quiet: quiet holds back what reaches the outside world, and this never leaves the company.
+  async function teamTool(scope: RunScope, tool: "team.remind" | "team.digest", raw: unknown): Promise<ToolResult> {
+    const company = COMPANIES[scope.company];
+    if (!company) throw new HttpError(404, "There is no such company.");
+    const mail =
+      tool === "team.remind"
+        ? await reminderMail(pool, company, TOOLS["team.remind"].args.parse(raw).approvalId)
+        : await digestMail(pool, company, scope.teammate, TOOLS["team.digest"].args.parse(raw).day);
+    if (!mail) return { status: "done", result: { queued: 0, note: "The approval was already decided." } };
+    const people = await deciders(pool, scope.company);
+    if (people.length === 0) return { status: "denied", reason: "Nobody who decides approvals has signed in yet, so there is no one to write to." };
+    for (const to of people) {
+      await outbox.add({
+        company: scope.company,
+        teammate: scope.teammate,
+        runId: scope.runId,
+        target: "lmail.send",
+        title: `${mail.subject} (to ${to})`.slice(0, 200),
+        idempotencyKey: `${mail.key}:${to}`,
+        payload: { mailbox: company.accountsMailbox, to, subject: mail.subject, text: mail.text, inReplyTo: null },
+        status: "queued",
+      });
+    }
+    return { status: "done", result: { queued: people.length } };
+  }
+
   // Runs an approved call once. If the call fails, the approval can run it on the next try.
   async function runApproved<Args>(
     scope: RunScope,
@@ -406,9 +435,10 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       if (tool === "books.post_bill") result = await postBillTool(body, body.args, body.approvalId, run);
       else if (tool === "mail.reply") result = await replyTool(body, body.args, body.approvalId, run);
       else if (tool === "news.publish") result = await publishTool(body, body.args, body.approvalId, run);
+      else if (tool === "team.remind" || tool === "team.digest") result = await teamTool(body, tool, body.args);
       else result = { status: "done", result: await read(body.company, tool, body.args) };
     } catch (error) {
-      if (error instanceof ServiceError && error.status < 500) throw new HttpError(422, error.message);
+      if (error instanceof ServiceError && error.status < 500) throw new HttpError(422, error.detail);
       throw error;
     }
     const outcome = result.status === "done" ? "done" : result.status === "needs_approval" ? "waiting for a person" : "denied";
