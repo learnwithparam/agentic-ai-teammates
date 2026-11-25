@@ -173,3 +173,24 @@ test("an event that succeeds on a retry no longer shows the earlier error", asyn
   const { rows } = await pool.query("SELECT status, error FROM inbox_events WHERE teammate = $1", [teammate]);
   assert.deepEqual(rows, [{ status: "done", error: null }]);
 });
+
+test("a run whose worker stopped is ended, and a long run that still holds its lease is left alone", async () => {
+  const inbox = new Inbox(pool);
+  const teammate = await newTeammate();
+  await inbox.receive(mail(teammate, "history-1"));
+  const stopped = randomUUID();
+  const working = randomUUID();
+  await inbox.claim("bramble", teammate, stopped);
+  await expireLease(stopped);
+  await inbox.claim("bramble", teammate, working);
+  for (const runId of [stopped, working]) {
+    await pool.query("INSERT INTO runs (id, company, teammate, started_at) VALUES ($1, 'bramble', $2, now() - interval '1 hour')", [runId, teammate]);
+  }
+  const ended = await inbox.endAbandonedRuns();
+  assert.ok(ended.includes(stopped));
+  assert.ok(!ended.includes(working));
+  const { rows } = await pool.query("SELECT id, status, stop_reason FROM runs WHERE id = ANY($1)", [[stopped, working]]);
+  const byId = Object.fromEntries(rows.map((row) => [row.id, `${row.status}/${row.stop_reason}`]));
+  assert.equal(byId[stopped], "finished/failed");
+  assert.equal(byId[working], "running/null");
+});

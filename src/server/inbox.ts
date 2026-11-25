@@ -148,6 +148,21 @@ export class Inbox {
     return (rowCount ?? 0) > 0;
   }
 
+  // Ends each run whose worker stopped. Such a run holds no live lease any more.
+  // Its events went back to the inbox, so a later run does the work.
+  // Without this, its row would say "running" forever.
+  async endAbandonedRuns(): Promise<string[]> {
+    const { rows } = await this.pool.query<{ id: string }>(
+      `UPDATE runs SET status = 'finished', stop_reason = 'failed', finished_at = now(),
+         summary = 'The worker stopped before this run finished. Its events went back to the inbox.'
+       WHERE status = 'running' AND started_at < now() - make_interval(secs => $1)
+         AND NOT EXISTS (SELECT 1 FROM inbox_events event WHERE event.run_id = runs.id AND event.status = 'claimed' AND event.lease_until > now())
+       RETURNING id`,
+      [this.settings.leaseSeconds],
+    );
+    return rows.map((row) => row.id);
+  }
+
   // Marks the run's events done. False means the run no longer held them.
   async complete(runId: string): Promise<boolean> {
     const { rowCount } = await this.pool.query(

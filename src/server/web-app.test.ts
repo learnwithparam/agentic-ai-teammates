@@ -6,9 +6,13 @@ import express, { type Express, type RequestHandler } from "express";
 import type { Pool } from "pg";
 import { Webhook } from "standardwebhooks";
 import { handleErrors } from "../../apps/shared/server";
+import * as client from "../client/mission-control/api";
 import { Approvals } from "./approvals";
+import { say } from "./conversation";
+import { Outbox } from "./outbox";
 import type { Person } from "./auth";
 import { contextualTuples, type Check } from "./permissions";
+import { recordSpend } from "./spend";
 import { testDatabase } from "./test-database";
 import { testMemory } from "./test-memory";
 import { createWebApp } from "./web-app";
@@ -328,4 +332,41 @@ test("an empty or overlong message is refused", async () => {
   for (const text of ["   ", "x".repeat(2001)]) {
     assert.equal((await call("/api/teammates/invoices/messages", { method: "POST", body: { messageId: randomUUID(), text } })).status, 400);
   }
+});
+
+// The page reads every answer with the schemas in src/client/mission-control/api.ts. Parsing a
+// real answer here means a change to either side fails this test, not the page in a browser.
+test("every answer Mission Control reads matches the shape the page expects", async () => {
+  const approval = await pendingApproval(4200);
+  // An invoice from LDrive has no sender. The live board once failed to load on exactly that.
+  const fromDrive = { kind: "drive", id: "file-1", attachmentId: null, sender: null, subject: "LP-772.pdf", messageId: null };
+  await pool.query("UPDATE approvals SET args = args || jsonb_build_object('source', $2::jsonb) WHERE id = $1", [approval.id, JSON.stringify(fromDrive)]);
+  const run = approval.runId;
+  await pool.query("INSERT INTO run_steps (run_id, kind, title, detail) VALUES ($1, 'check', 'Ran the invoice checks', $2)", [run, JSON.stringify({ failed: ["po_over_tolerance"] })]);
+  await recordSpend(pool, { company: "bramble", teammate: "invoices", runId: run, tier: "fast", task: "extract", inputTokens: 900, outputTokens: 200, costUsd: 0.0012 });
+  await new Outbox(pool).add({
+    company: "bramble", teammate: "invoices", runId: run, target: "lmail.send", title: "Reply to Lumen", idempotencyKey: `test:${run}`,
+    payload: { to: "billing@lumen.example", subject: "Your invoice", text: "Thanks, it is with an approver." }, status: "draft",
+  });
+  await say(pool, { company: "bramble", teammate: "invoices", person: ADA.email, messageId: randomUUID(), role: "person", author: ADA.name, text: "What are you waiting on?" });
+  signedIn = ADA;
+  await call("/api/teammates/invoices", { method: "PATCH", body: { paused: false, quiet: true, autoPostLimit: 2000, dailyBudgetUsd: 2 } });
+
+  const read = async <T>(path: string, shape: { parse: (value: unknown) => T }) => {
+    const response = await call(path);
+    assert.equal(response.status, 200, path);
+    return shape.parse(await response.json());
+  };
+  const board = await read("/api/board", client.Board);
+  assert.ok(board.approvals.some((item) => item.id === approval.id));
+  assert.ok(board.outbox.some((item) => item.status === "draft"));
+  assert.ok(board.spend.length > 0);
+  const detail = await read(`/api/runs/${run}`, client.RunDetail);
+  assert.ok(detail.steps.length > 0);
+  await read("/api/me", client.SignedIn);
+  await read("/api/rules", client.Rules);
+  assert.ok((await read("/api/audit", client.Audit)).entries.length > 0);
+  const { lines } = await read("/api/teammates/invoices/conversation", client.Conversation);
+  assert.ok(lines.some((line) => line.text === "What are you waiting on?"));
+  await read("/api/teammates/invoices/instructions", client.Instructions);
 });

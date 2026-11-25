@@ -39,3 +39,10 @@ test("a compose file without its own project name fails", () => {
   assert.match(unnamed.join("\n"), /langfuse\/docker-compose\.yml: has no "name: teammates-/);
   assert.deepEqual(problemsFor({ "langfuse/docker-compose.yml": "name: teammates-langfuse\nservices:\n  web:\n    image: langfuse/langfuse:3\n" }), []);
 });
+
+test("a colour written outside the one stylesheet fails", () => {
+  const problems = problemsFor({ "src/client/mission-control/Spend.tsx": 'const bar = { fill: "#257de0" };' });
+  assert.match(problems.join("\n"), /Spend\.tsx: writes the colour "#257de0"/);
+  assert.match(problemsFor({ "src/client/mission-control/Board.tsx": 'style={{ color: "rgb(0 0 0)" }}' }).join("\n"), /writes the colour "rgb\("/);
+  assert.deepEqual(problemsFor({ "src/client/styles/app.css": "--chart-1: #257de0;" }), []);
+});

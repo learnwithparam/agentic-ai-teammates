@@ -19,6 +19,7 @@ export type Settled = { company: string; teammate: string; runId: string; stop: 
 export async function workOnce(options: WorkerOptions): Promise<Settled[]> {
   const inbox = options.inbox ?? new Inbox(options.pool);
   const settled: Settled[] = [];
+  await inbox.endAbandonedRuns();
   for (const ready of await inbox.readyInboxes()) {
     const done = await workInbox(options, inbox, ready.company, ready.teammate);
     if (done) settled.push(done);

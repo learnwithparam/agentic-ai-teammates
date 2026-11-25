@@ -15,6 +15,9 @@
 //     work teaches nothing; a missing key stops the process instead.
 //   - process.env is read only in src/server/env.ts, so every setting has one place, and a missing
 //     one fails there with its name.
+//   - A colour is written only in src/client/styles/app.css. Every page then keeps one palette, and
+//     the contrast checked there holds everywhere. The shadcn CLI's own files are left out: its chart
+//     names Recharts' built-in greys only to find and restyle them.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, posix } from "node:path";
@@ -30,6 +33,9 @@ const ENTRY_SCRIPTS = new Set(["dev", "build", "start", "typecheck", "check", "p
 const APP_CODE = /^(src|apps|news\/src)\//;
 const STAND_IN_WORDS = /\b(mock(s|ed|ing)?|fake[sd]?|fallbacks?|canned|stubs?|stubbed|dummy)\b/i;
 const ENV_FILE = "src/server/env.ts";
+const CLI_FOLDER = "src/client/components/ui/";
+const COLOUR_FILE = "src/client/styles/app.css";
+const COLOUR = /#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|oklch)\(/i;
 const TEXT = /\.(ts|tsx|mjs|js|md|json|ya?ml|sh|html|css)$/;
 
 function stripComments(path: string, body: string): string {
@@ -141,6 +147,8 @@ function productionProblems(files: Map<string, string>, bodies: Map<string, stri
     if (path !== ENV_FILE && /\bprocess\.env\b/.test(bodies.get(path) ?? "")) {
       problems.push(`${path}: reads process.env. Settings are read only in ${ENV_FILE}.`);
     }
+    const colour = path.startsWith("src/client/") && !path.startsWith(CLI_FOLDER) && path !== COLOUR_FILE ? COLOUR.exec(bodies.get(path) ?? "") : null;
+    if (colour) problems.push(`${path}: writes the colour "${colour[0]}". Colours live only in ${COLOUR_FILE}.`);
   }
   return problems;
 }
