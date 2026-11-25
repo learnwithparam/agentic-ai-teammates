@@ -89,6 +89,8 @@ function missingPaths(bodies: Map<string, string>, tracked: string[]): string[] 
   for (const [path, body] of bodies) {
     // Test fixtures name made-up paths on purpose.
     if (!CODE.test(basename(path)) || path.endsWith(".test.ts")) continue;
+    // The news page names web addresses next to itself, such as data/today.json, not repo paths.
+    if (path.startsWith("news/src/")) continue;
     for (const match of body.matchAll(/["'`]((?:\.\.?\/)*(?:scripts|data|docs|src|apps|infra|news)\/[\w./-]+)["'`]/g)) {
       const raw = match[1];
       const target = raw.startsWith(".") ? posix.normalize(posix.join(posix.dirname(path), raw)) : raw;
@@ -103,9 +105,13 @@ function missingPaths(bodies: Map<string, string>, tracked: string[]): string[] 
 function manifestProblems(files: Map<string, string>): string[] {
   const problems: string[] = [];
   const manifest = JSON.parse(files.get("package.json") ?? "{}");
-  for (const field of ["dependencies", "devDependencies"]) {
-    for (const [name, version] of Object.entries<string>(manifest[field] ?? {})) {
-      if (!/^\d+\.\d+\.\d+$/.test(version)) problems.push(`package.json ${field} "${name}" is "${version}". Pin an exact version.`);
+  // The news page is its own package, built by the Pages workflow, so its versions are pinned too.
+  for (const path of ["package.json", "news/package.json"]) {
+    const pinned = JSON.parse(files.get(path) ?? "{}");
+    for (const field of ["dependencies", "devDependencies"]) {
+      for (const [name, version] of Object.entries<string>(pinned[field] ?? {})) {
+        if (!/^\d+\.\d+\.\d+$/.test(version)) problems.push(`${path} ${field} "${name}" is "${version}". Pin an exact version.`);
+      }
     }
   }
   // The Node version lives in package.json engines. CI reads it from there; the README quotes it.

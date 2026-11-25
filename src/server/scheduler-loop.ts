@@ -7,7 +7,10 @@ import { ensureSchedule, fireDue } from "./timers";
 export const STANDING_SCHEDULES: Record<string, { name: string; cron: string }[]> = {
   // The day's summary, at six on a working evening.
   invoice: [{ name: "digest", cron: "0 18 * * 1-5" }],
-  news: [{ name: "digest", cron: "0 18 * * 1-5" }],
+  news: [
+    { name: "edition", cron: "0 7 * * 1-5" },
+    { name: "digest", cron: "0 18 * * 1-5" },
+  ],
 };
 
 // Gives every teammate its kind's schedules, on its company's clock.

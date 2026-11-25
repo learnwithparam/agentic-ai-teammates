@@ -11,6 +11,10 @@ import { type Memory, notePath, vendorTopic } from "./memory";
 import { parseJsonText, payloadHash } from "./canonical";
 import { checkInvoice, type Invoice, type Reason, REASONS, PO_TOLERANCE } from "./checks";
 import { GitHubError, type GitHubPublisher } from "./github";
+import { ArticleError, type readArticle } from "./news/article";
+import { NEWS_DESKS, type NewsDesk } from "./news/desk";
+import { editionProblems } from "./news/edition";
+import type { collectStories } from "./news/sources";
 import type { CallModel, ChatMessage, ToolSpec } from "./llm";
 import type { Tier } from "./models";
 import { Outbox } from "./outbox";
@@ -36,8 +40,13 @@ export type GatewayDeps = {
   // Null when GITHUB_TOKEN and NEWS_REPO are not set. News then cannot publish, and says why.
   publisher: GitHubPublisher | null;
   memory: Memory;
+  // The news sources and the article reader. Both reach the public internet, so only the gateway runs them.
+  news: { collect: (desk: NewsDesk) => ReturnType<typeof collectStories>; read: typeof readArticle };
   tokens: { worker: string; dispatcher: string };
 };
+
+// A link published within this many days is never collected or published again.
+export const PUBLISHED_LOOKBACK_DAYS = 30;
 
 const RunScope = z.object({
   runId: z.uuid(),
@@ -251,6 +260,19 @@ export function createGatewayApp(deps: GatewayDeps): Express {
         const args = TOOLS[tool].args.parse(raw);
         return { text: await memory.read(scope, args.path) };
       }
+      case "news.read": {
+        const args = TOOLS[tool].args.parse(raw);
+        const { rows } = await pool.query<{ url: string }>("SELECT url FROM news_candidates WHERE company = $1 AND day = $2 AND id = $3", [company, args.day, args.storyId]);
+        if (!rows[0]) throw new HttpError(404, "There is no such story in the day's collection.");
+        try {
+          const article = await deps.news.read(rows[0].url);
+          return { text: article.text, reason: null };
+        } catch (error) {
+          // A page that will not load or is not an article is an answer, not a failure of the run.
+          if (error instanceof ArticleError) return { text: null, reason: error.message };
+          throw error;
+        }
+      }
       default:
         throw new Error(`${tool} is not a reading tool.`);
     }
@@ -349,6 +371,37 @@ export function createGatewayApp(deps: GatewayDeps): Express {
     return deferToPerson(scope, "mail.reply", args, { title: `Reply to ${args.to}`, brief: why, reasons: [why], canAllowAlways: true });
   }
 
+  // ---------- News: collect, then publish only what was collected ----------
+
+  // Links published before the given day, within the lookback.
+  async function publishedBefore(company: string, day: string): Promise<string[]> {
+    const { rows } = await pool.query<{ url: string }>(
+      "SELECT url FROM news_published WHERE company = $1 AND day < $2::date AND day >= $2::date - $3::int",
+      [company, day, PUBLISHED_LOOKBACK_DAYS],
+    );
+    return rows.map((row) => row.url);
+  }
+
+  async function collectTool(scope: RunScope, raw: unknown): Promise<ToolResult> {
+    const { day } = TOOLS["news.collect"].args.parse(raw);
+    const desk = NEWS_DESKS[scope.company];
+    if (!desk) return { status: "denied", reason: "This company has no news desk set up." };
+    const { stories, sources } = await deps.news.collect(desk);
+    const before = new Set(await publishedBefore(scope.company, day));
+    const fresh = stories.filter((story) => !before.has(story.url));
+    const kept = [];
+    for (const story of fresh) {
+      // Collecting the same day again keeps each story's id, so a resumed edition still finds its picks.
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO news_candidates (company, day, url, title, source, published_at, snippet) VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (company, day, url) DO UPDATE SET title = EXCLUDED.title RETURNING id`,
+        [scope.company, day, story.url, story.title, story.source, story.publishedAt, story.snippet],
+      );
+      kept.push({ id: Number(rows[0].id), ...story });
+    }
+    return { status: "done", result: { audience: desk.audience, stories: kept, sources } };
+  }
+
   async function publish(scope: RunScope, args: ToolArgs<"news.publish">, status: "draft" | "queued", releasedBy?: string): Promise<ToolResult> {
     const { message } = await outbox.add({
       company: scope.company,
@@ -367,6 +420,10 @@ export function createGatewayApp(deps: GatewayDeps): Express {
   // The same policy as a reply: a standing rule a person set beats the tool's own default.
   async function publishTool(scope: RunScope & { threadId: string }, raw: unknown, approvalId: string | undefined, run: { quiet: boolean }): Promise<ToolResult> {
     const args = TOOLS["news.publish"].args.parse(raw);
+    // Every card must link to a story collected for that day, and to none published before.
+    const { rows } = await pool.query<{ url: string }>("SELECT url FROM news_candidates WHERE company = $1 AND day = $2", [scope.company, args.day]);
+    const problems = editionProblems(args.cards, rows.map((row) => row.url), await publishedBefore(scope.company, args.day));
+    if (problems.length) return { status: "denied", reason: problems.join(" ") };
     if (approvalId) {
       return runApproved(scope, "news.publish", args, approvalId, (approval) => publish(scope, args, "queued", approval.decidedByName ?? undefined));
     }
@@ -476,6 +533,7 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       else if (tool === "news.publish") result = await publishTool(body, body.args, body.approvalId, run);
       else if (tool === "team.remind" || tool === "team.digest") result = await teamTool(body, tool, body.args);
       else if (tool === "memory.record_decision") result = await recordDecision(body, body.args);
+      else if (tool === "news.collect") result = await collectTool(body, body.args);
       else result = { status: "done", result: await read(body, tool, body.args) };
     } catch (error) {
       if (error instanceof ServiceError && error.status < 500) throw new HttpError(422, error.detail);

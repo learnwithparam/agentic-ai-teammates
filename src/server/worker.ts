@@ -4,6 +4,7 @@ import { requireSettings, setting } from "./env";
 import { GatewayClient } from "./gateway-client";
 import { Inbox, listenForEvents } from "./inbox";
 import { invoiceTeammate } from "./teammates/invoice";
+import { newsTeammate } from "./teammates/news";
 import { startTracing } from "./tracing";
 import { workOnce } from "./worker-loop";
 
@@ -25,7 +26,7 @@ const options = {
   pool,
   gateway: new GatewayClient(setting("GATEWAY_URL"), setting("GATEWAY_WORKER_TOKEN")),
   inbox: new Inbox(pool),
-  kinds: { invoice: invoiceTeammate(checkpointer) },
+  kinds: { invoice: invoiceTeammate(checkpointer), news: newsTeammate(checkpointer) },
 };
 
 let stopping = false;

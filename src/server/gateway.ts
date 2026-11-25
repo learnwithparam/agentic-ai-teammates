@@ -8,6 +8,8 @@ import { createGatewayApp } from "./gateway-app";
 import { GitHubPublisher } from "./github";
 import { createModelClient } from "./llm";
 import { Memory } from "./memory";
+import { readArticle } from "./news/article";
+import { collectStories } from "./news/sources";
 import { COMPANIES } from "./people";
 import { createS3 } from "./s3";
 import { renewWatches } from "./subscriptions";
@@ -31,6 +33,8 @@ const mailboxes = new Map(Object.values(COMPANIES).map((company) => [company.ali
 const githubToken = optionalSetting("GITHUB_TOKEN");
 const newsRepo = optionalSetting("NEWS_REPO");
 if (!githubToken || !newsRepo) console.log("News publishing is off until GITHUB_TOKEN and NEWS_REPO are set.");
+const exaKey = optionalSetting("EXA_API_KEY");
+console.log(exaKey ? "Exa is on as a news source." : "Exa is off as a news source until EXA_API_KEY is set.");
 
 const mail = (company: string) => {
   const mailbox = mailboxes.get(company);
@@ -49,6 +53,7 @@ const app = createGatewayApp({
   books: new QuirkBooks(setting("QUIRKBOOKS_URL"), setting("QUIRKBOOKS_API_KEY")),
   publisher: githubToken && newsRepo ? new GitHubPublisher(githubToken, newsRepo) : null,
   memory,
+  news: { collect: (desk) => collectStories(desk, exaKey ?? null), read: readArticle },
   tokens: { worker: setting("GATEWAY_WORKER_TOKEN"), dispatcher: setting("GATEWAY_DISPATCHER_TOKEN") },
 });
 

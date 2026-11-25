@@ -1,0 +1,50 @@
+name: News page
+
+# The news teammate commits each edition to news/public/data. Every such commit, and every change
+# to the page itself, builds the page and puts it on GitHub Pages.
+on:
+  push:
+    branches: [main]
+    paths: ["news/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. A newer edition waits for the one before it, and never cancels it.
+concurrency:
+  group: news-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+          cache-dependency-path: news/package-lock.json
+
+      - name: Install, check and build the page
+        run: npm ci && npm run check
+        working-directory: news
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: news/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

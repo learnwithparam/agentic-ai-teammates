@@ -23,9 +23,12 @@ jobs:
         with:
           node-version-file: package.json
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            news/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci && npm ci --prefix news
 
       - name: Start Postgres, OpenFGA and MinIO
         run: ./.github/start-test-services.sh

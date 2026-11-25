@@ -48,6 +48,11 @@ before(async () => {
     }) as GatewayDeps["books"],
     publisher: null,
     memory,
+    // The news sources answer with the stories below, and the reader with a set text, so no test reaches the internet.
+    news: {
+      collect: async () => ({ stories: STORIES, sources: [{ name: "Example News", stories: STORIES.length, error: null }] }),
+      read: async (url) => ({ url, title: null, text: `The full text of ${url}.` }),
+    },
     tokens: { worker: WORKER, dispatcher: randomUUID() },
   };
   server = createGatewayApp(deps).listen(0);
@@ -60,6 +65,14 @@ after(async () => {
   await close();
   await closeMemory();
 });
+
+const STORIES = ["buses", "trams", "ferries"].map((name) => ({
+  url: `https://example.org/${name}`,
+  title: `A city opens its ${name} data`,
+  source: "Example News",
+  publishedAt: "2026-11-25T06:00:00.000Z",
+  snippet: `Live ${name} data.`,
+}));
 
 const NEWS = {
   day: "2026-11-25",
@@ -96,8 +109,15 @@ async function outboxFor(runId: string) {
   return rows;
 }
 
+async function collect(runId: string, day: string) {
+  const result = await callTool("news.collect", { runId, company: "bramble", teammate: "news", threadId: `news:${day}`, args: { day } });
+  assert.equal(result.status, "done");
+  return result.result as { stories: { id: number; url: string }[] };
+}
+
 test("with no rule set, the news goes to the outbox", async () => {
   const runId = await startRun("news");
+  await collect(runId, NEWS.day);
   const result = await callTool("news.publish", { runId, company: "bramble", teammate: "news", threadId: "news:a", args: NEWS });
   assert.equal(result.status, "done");
   assert.equal((await outboxFor(runId)).length, 1);
@@ -108,6 +128,7 @@ test("a standing rule to approve the news makes it wait for a person, with nothi
   try {
     const runId = await startRun("news");
     const day = { ...NEWS, day: "2026-11-26" };
+    await collect(runId, day.day);
     const result = await callTool("news.publish", { runId, company: "bramble", teammate: "news", threadId: "news:b", args: day });
     assert.equal(result.status, "needs_approval");
     assert.deepEqual(await outboxFor(runId), []);
@@ -124,6 +145,41 @@ test("a standing rule to approve the news makes it wait for a person, with nothi
   } finally {
     await pool.query("DELETE FROM tool_rules WHERE teammate = 'news'");
   }
+});
+
+// A model names a story by its id, and the gateway fetches the link it collected. So a model
+// never sends the gateway to a link of its own. Every card must link to a collected story.
+test("news.read reads only a story collected for that day", async () => {
+  const runId = await startRun("news");
+  const { stories } = await collect(runId, "2026-11-27");
+  const call = (day: string, storyId: number) => fetch(`${base}/tools/news.read`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${WORKER}` },
+    body: JSON.stringify({ runId, company: "bramble", teammate: "news", threadId: "news:read", args: { day, storyId } }),
+  });
+  const read = await (await call("2026-11-27", stories[0].id)).json();
+  assert.deepEqual(read.result, { text: `The full text of ${stories[0].url}.`, reason: null });
+  assert.equal((await call("2026-11-28", stories[0].id)).status, 404);
+});
+
+test("the news is refused when a card links to a story no source gave that day", async () => {
+  const runId = await startRun("news");
+  await collect(runId, "2026-11-29");
+  const card = { ...NEWS.cards[0], url: "https://elsewhere.example/made-up" };
+  const result = await callTool("news.publish", { runId, company: "bramble", teammate: "news", threadId: "news:2026-11-29", args: { day: "2026-11-29", cards: [card] } });
+  assert.equal(result.status, "denied");
+  assert.match(result.reason, /no source gave today/);
+  assert.deepEqual(await outboxFor(runId), []);
+});
+
+test("a story published once is not collected again on a later day", async () => {
+  // The dispatcher records each story it publishes. The buses story went out on 25 November.
+  await pool.query("INSERT INTO news_published (company, url, day, headline) VALUES ('bramble', 'https://example.org/buses', '2026-11-25', 'Buses') ON CONFLICT DO NOTHING");
+  const runId = await startRun("news");
+  const { stories } = await collect(runId, "2026-11-30");
+  assert.ok(!stories.some((story) => story.url === "https://example.org/buses"));
+  const result = await callTool("news.publish", { runId, company: "bramble", teammate: "news", threadId: "news:2026-11-30", args: { ...NEWS, day: "2026-11-30" } });
+  assert.equal(result.status, "denied");
 });
 
 // The team tools write only to the company's own people who decide, and only from Mission

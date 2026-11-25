@@ -21,6 +21,7 @@ export type ToolDefinition = {
 };
 
 const Text = z.string().min(1).max(500);
+const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const Card = z.object({
   headline: z.string().min(1).max(90),
@@ -114,11 +115,24 @@ export const TOOLS = {
   "news.publish": {
     description: "Publish the day's news cards.",
     args: z.object({
-      day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      day: Day,
       cards: z.array(Card).min(1).max(10),
     }),
     decision: "allow",
     readOnly: false,
+  },
+  "news.collect": {
+    description: "Collect the day's stories from every news source, minus any already published.",
+    // It records the day's stories in the gateway, so it is never offered to a model.
+    args: z.object({ day: Day }),
+    decision: "allow",
+    readOnly: false,
+  },
+  "news.read": {
+    description: "Read the text of one of the day's collected stories, by its id.",
+    args: z.object({ day: Day, storyId: z.number().int().positive() }),
+    decision: "allow",
+    readOnly: true,
   },
   "memory.read": {
     description: "Read one file of this teammate's memory: instructions.md, or a note such as notes/vendor-lumen-print-house.md.",

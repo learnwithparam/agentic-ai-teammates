@@ -6,7 +6,7 @@ Each one asks a person before it does anything risky.
 You build two teammates:
 
 - **The invoice teammate** reads invoices from LMail and LDrive and posts bills to QuirkBooks. When every check tallies, it posts on its own. When one fails, it waits for your approval. For example, an invoice whose bank details differ from the vendor's record never posts on its own.
-- **The news teammate** reads RSS, Hacker News and GDELT each morning. It picks the best stories and publishes them as swipe cards.
+- **The news teammate** reads RSS feeds, Hacker News and GDELT each morning. Exa joins when you give it a key. It picks the stories that matter to a design studio and publishes them as swipe cards.
 
 The design follows the five parts of [Building always-on agents](https://claude.com/resources/articles/building-always-on-agents): inbox, timers, memory, permissions and outbox.
 
@@ -99,6 +99,24 @@ With no case named, it sends them all. Mail cases go by SMTP to ap@bramble.examp
 
 After changing `data/invoices/cases.ts`, write the files again with `npm run invoices:make`.
 
+## Read the morning news
+
+The news teammate starts at seven on working mornings. It collects the last two days of stories and drops the ones it published before. Then it picks up to five, reads each article and writes one card per story. Each card links only to a story a source gave that day. The gateway refuses any other link.
+
+To publish the cards, fork this repo and set two values in `.env`:
+
+- `NEWS_REPO` is your fork, as owner/name.
+- `GITHUB_TOKEN` is a fine-grained token with Contents read and write on that repo only.
+
+Then turn on Pages in the fork's settings, with GitHub Actions as the source. Each edition is a commit to `news/public/data`, and the News page workflow puts it live. Set `EXA_API_KEY` to add Exa as a source.
+
+The teammate starts quiet. Its first editions wait as drafts on the board until you let it send. To work on the page itself:
+
+```bash
+npm --prefix news install
+npm --prefix news run dev
+```
+
 ## Score the teammate
 
 ```bash
@@ -116,4 +134,4 @@ The table counts the right cases and the wrong postings. It also shows the cost 
 npm run check
 ```
 
-This runs `npm run typecheck`, the tests and the repo checks. It also checks that both models are still live on OpenRouter.
+This runs `npm run typecheck`, the tests and the repo checks. It also checks that both models are still live on OpenRouter, then checks and builds the news page.
