@@ -12,7 +12,7 @@ export const STANDING_SCHEDULES: Record<string, { name: string; cron: string }[]
 
 // Gives every teammate its kind's schedules, on its company's clock.
 export async function ensureStandingSchedules(pool: Pool) {
-  const { rows } = await pool.query<{ company: string; id: string; kind: string }>("SELECT company, id, kind FROM teammates");
+  const { rows } = await pool.query<{ company: string; id: string; kind: string }>("SELECT company, id, kind FROM teammates WHERE on_duty");
   for (const mate of rows) {
     const company = COMPANIES[mate.company];
     if (!company) continue;

@@ -83,7 +83,8 @@ test("a schedule runs on the company's clock, across a clock change", () => {
   assert.equal(companyDay(new Date("2026-11-24T23:30:00Z"), "Europe/Amsterdam"), "2026-11-25");
 });
 
-test("starting the scheduler again keeps a schedule a person moved", async () => {
+test("starting the scheduler again keeps a schedule a person moved, and skips a teammate off duty", async () => {
+  await pool.query("INSERT INTO teammates (company, id, kind, name, on_duty) VALUES ('bramble', 'scorer', 'invoice', 'Scorer', false)");
   await ensureStandingSchedules(pool);
   const { rows } = await pool.query("SELECT teammate, cron, timezone FROM timers WHERE name = 'digest' ORDER BY teammate");
   assert.deepEqual(rows, [

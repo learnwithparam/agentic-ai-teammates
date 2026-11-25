@@ -28,7 +28,7 @@ import { fileName } from "./render";
 requireSettings(["DATABASE_URL", "GATEWAY_URL", "GATEWAY_WORKER_TOKEN"]);
 
 // The eval runs as its own teammate, so its spend has its own budget. It has no inbox
-// subscription, so the worker never wakes it.
+// subscription and is off duty, so nothing wakes it and it gets no daily schedule.
 const EVAL_TEAMMATE = "invoices-eval";
 const AT_ONCE = 5;
 const files = path.join(path.dirname(fileURLToPath(import.meta.url)), "files");
@@ -46,7 +46,7 @@ const cases = positionals.length ? CASES.filter((invoice) => positionals.include
 const pool = createPool(setting("DATABASE_URL"));
 await migrate(pool);
 await pool.query(
-  "INSERT INTO teammates (company, id, kind, name) VALUES ('bramble', $1, 'invoice', 'Invoice eval') ON CONFLICT (company, id) DO UPDATE SET paused = false",
+  "INSERT INTO teammates (company, id, kind, name, on_duty) VALUES ('bramble', $1, 'invoice', 'Invoice eval', false) ON CONFLICT (company, id) DO UPDATE SET paused = false, on_duty = false",
   [EVAL_TEAMMATE],
 );
 const gateway = new GatewayClient(setting("GATEWAY_URL"), setting("GATEWAY_WORKER_TOKEN"));

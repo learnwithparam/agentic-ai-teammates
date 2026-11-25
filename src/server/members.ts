@@ -12,11 +12,16 @@ export async function recordMember(pool: Pool, person: Person) {
   );
 }
 
+// A copy of roles goes stale when Keycloak takes them away. Only people who signed in recently get
+// team mail, so someone who lost access stops getting it within this many days.
+export const MEMBER_FRESH_DAYS = 30;
+
 // The email addresses of the people in a company who can decide an approval.
 export async function deciders(pool: Pool, company: string): Promise<string[]> {
   const { rows } = await pool.query<{ email: string }>(
-    "SELECT email FROM members WHERE company = $1 AND roles && ARRAY['admin', 'approver'] AND email <> '' ORDER BY email",
-    [company],
+    `SELECT email FROM members WHERE company = $1 AND roles && ARRAY['admin', 'approver'] AND email <> ''
+       AND last_seen_at > now() - make_interval(days => $2) ORDER BY email`,
+    [company, MEMBER_FRESH_DAYS],
   );
   return rows.map((row) => row.email);
 }

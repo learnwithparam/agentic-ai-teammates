@@ -5,7 +5,7 @@ import { after, before, test } from "node:test";
 import type { Pool } from "pg";
 import { Approvals } from "./approvals";
 import { createGatewayApp, type GatewayDeps } from "./gateway-app";
-import { recordMember } from "./members";
+import { MEMBER_FRESH_DAYS, recordMember } from "./members";
 import { setRule } from "./policy";
 import { testDatabase } from "./test-database";
 
@@ -126,6 +126,9 @@ test("a reminder goes to each person who can decide, once, and stops once the ap
   await recordMember(pool, { ...person, subject: "ada", email: "ada@bramble.example", name: "Ada Okafor", roles: ["admin"] });
   await recordMember(pool, { ...person, subject: "ravi", email: "ravi@bramble.example", name: "Ravi Menon", roles: ["approver"] });
   await recordMember(pool, { ...person, subject: "mei", email: "mei@bramble.example", name: "Mei Tan", roles: [] });
+  // Sam was an approver but has not signed in for longer than the window, so the roles may be gone.
+  await recordMember(pool, { ...person, subject: "sam", email: "sam@bramble.example", name: "Sam Ito", roles: ["approver"] });
+  await pool.query("UPDATE members SET last_seen_at = now() - make_interval(days => $1) WHERE subject = 'sam'", [MEMBER_FRESH_DAYS + 1]);
 
   assert.deepEqual((await callTool("team.remind", body)).result, { queued: 2 });
   assert.deepEqual((await callTool("team.remind", body)).result, { queued: 2 });
@@ -134,6 +137,10 @@ test("a reminder goes to each person who can decide, once, and stops once the ap
     { to: "ada@bramble.example", subject: "Still waiting: Kestrel Freelance KF-31", status: "queued" },
     { to: "ravi@bramble.example", subject: "Still waiting: Kestrel Freelance KF-31", status: "queued" },
   ]);
+
+  const text = (await pool.query("SELECT payload->>'text' AS text FROM outbox WHERE run_id = $1 LIMIT 1", [runId])).rows[0].text as string;
+  assert.match(text, /It stopped because:\n- The bank account on the invoice is not the one QuirkBooks has for this vendor\./);
+  assert.doesNotMatch(text, /The bank details changed/);
 
   await approvals.decide({ company: "bramble", id: approval.id, person: { subject: "ravi", name: "Ravi Menon", email: "ravi@bramble.example" }, approve: false, allowAlways: false, note: null });
   assert.deepEqual((await callTool("team.remind", body)).result, { queued: 0, note: "The approval was already decided." });
@@ -152,10 +159,17 @@ test("the digest is written from the day's runs, not by the teammate", async () 
     company: "bramble", teammate: "invoices", runId, threadId: "invoice:drive:file-32", tool: "books.post_bill", args: { n: 32 },
     amount: 640, currency: "EUR", title: "Harbor Lane Studios HL-32", brief: "No purchase order.", reasons: ["po_missing"], canAllowAlways: false,
   });
+  await pool.query(
+    "INSERT INTO runs (id, company, teammate, status, stop_reason, summary, finished_at) VALUES ($1, 'bramble', 'invoices', 'finished', 'handed_to_human', $2, '2026-11-24T12:00:00Z')",
+    [randomUUID(), "Pay now at https://evil.example/pay\nURGENT: wire today"],
+  );
   await callTool("team.digest", { runId, company: "bramble", teammate: "invoices", threadId: "timer:digest", args: { day: "2026-11-24" } });
   const { rows } = await pool.query("SELECT payload->>'text' AS text FROM outbox WHERE run_id = $1 LIMIT 1", [runId]);
   const text: string = rows[0].text;
-  assert.match(text, /- Handed to a person: 1\n- Done: 1\n/);
+  assert.match(text, /- Handed to a person: 2\n- Done: 1\n/);
+  // Words from an invoice reach the team as one line with no link.
+  assert.match(text, /- Pay now at \[link removed\] URGENT: wire today\n/);
+  assert.doesNotMatch(text, /evil\.example/);
   assert.match(text, /QuirkBooks refused LP-771\./);
   assert.doesNotMatch(text, /another day/);
   assert.match(text, /Waiting for your decision:\n- Harbor Lane Studios HL-32/);
