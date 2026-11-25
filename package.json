@@ -10,6 +10,9 @@
     "lmail": "tsx apps/lmail/main.ts",
     "ldrive": "tsx apps/ldrive/main.ts",
     "quirkbooks": "tsx apps/quirkbooks/main.ts",
+    "gateway": "tsx src/server/gateway.ts",
+    "worker": "tsx src/server/worker.ts",
+    "web": "tsx src/server/web.ts",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' 'apps/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md && tsx scripts/check-repo.ts"
   },

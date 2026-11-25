@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import type { Pool } from "pg";
 import { inTransaction } from "../../src/server/db";
 import { HttpError } from "../shared/server";
@@ -80,8 +80,7 @@ export class DriveStore {
       await client.query("UPDATE files SET trashed = true WHERE id = $1", [id]);
       await client.query("INSERT INTO changes (file_id, kind) VALUES ($1, 'removed')", [id]);
     });
-    const { rows } = await this.pool.query<{ object_key: string }>("SELECT object_key FROM files WHERE id = $1", [id]);
-    await this.s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: rows[0].object_key }));
+    // The bytes stay in S3. Only the listing drops the file, so nothing is lost by mistake.
     await this.notify();
   }
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { Webhook } from "standardwebhooks";
+import { HttpError } from "./server";
 
 // A world app tells subscribers about a change with a signed POST (the Standard Webhooks
 // format: webhook-id, webhook-timestamp, webhook-signature). Each notice is a row first, so a
@@ -8,6 +9,14 @@ import { Webhook } from "standardwebhooks";
 
 const MAX_ATTEMPTS = 12;
 const BATCH = 20;
+
+// Notices go only to Mission Control's hooks address (HOOKS_URL). A watch for any other
+// address is refused, so a key holder cannot point the app at an inside service.
+export function requireHookAddress(address: string, hooksUrl: string): string {
+  const url = new URL(address);
+  if (url.origin !== new URL(hooksUrl).origin) throw new HttpError(422, `Notices go only to ${new URL(hooksUrl).origin}.`);
+  return url.href;
+}
 
 export type Notice = { url: string; type: string; body: unknown; headers?: Record<string, string> };
 

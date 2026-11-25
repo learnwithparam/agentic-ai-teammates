@@ -1,9 +1,10 @@
 model
   schema 1.1
 
-# Who may see and decide what in Mission Control. A person's company and role come from their
-# signed Keycloak token and are sent with each question as contextual tuples, so Keycloak stays
-# the one place they are kept. An approval's company is stored when the teammate asks for it.
+# Who may see and decide what in Mission Control. A person's company, role and limit come from
+# their signed Keycloak token, and an object's company from Mission Control's own tables. All of
+# it is sent with each question as contextual tuples (src/server/permissions.ts), so nothing is
+# kept in two places.
 
 type user
 

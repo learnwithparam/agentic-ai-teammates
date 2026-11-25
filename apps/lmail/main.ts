@@ -6,14 +6,14 @@ import { optionalSetting, requireSettings, setting } from "../../src/server/env"
 import { COMPANIES } from "../../src/server/people";
 import { apiKeys } from "../shared/api-keys";
 import { createApp, HttpError, listen, servePage } from "../shared/server";
-import { WebhookSender } from "../shared/webhooks";
+import { WebhookSender, requireHookAddress } from "../shared/webhooks";
 import { startSmtp } from "./smtp";
 import { MailStore, normalize } from "./store";
 
 // LMail: mail for Bramble Studio and its vendors. People read and write mail on its web page;
 // programs use its API with a key, the way they would use Gmail's.
 
-requireSettings(["LMAIL_URL", "LMAIL_PORT", "LMAIL_SMTP_PORT", "LMAIL_DATABASE_URL", "LMAIL_API_KEY", "LMAIL_WEBHOOK_SECRET", "LMAIL_CLIENT_SECRET", "OIDC_ISSUER"]);
+requireSettings(["LMAIL_URL", "LMAIL_PORT", "LMAIL_SMTP_PORT", "LMAIL_DATABASE_URL", "LMAIL_API_KEY", "LMAIL_WEBHOOK_SECRET", "LMAIL_CLIENT_SECRET", "OIDC_ISSUER", "HOOKS_URL"]);
 
 const MIGRATIONS = new URL("./migrations", import.meta.url).pathname;
 
@@ -93,7 +93,8 @@ app.post("/api/v1/mailboxes/:address/send", requireScope("mail.send"), async (re
 
 app.post("/api/v1/mailboxes/:address/watch", requireScope("mail.read"), async (request, response) => {
   const { url } = z.object({ url: z.url() }).parse(request.body);
-  response.json(await store.watch(programMailbox(request, String(request.params.address)), url, request.client!.name));
+  const address = requireHookAddress(url, setting("HOOKS_URL"));
+  response.json(await store.watch(programMailbox(request, String(request.params.address)), address, request.client!.name));
 });
 
 // ---------- The web page, for people ----------

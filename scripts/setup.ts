@@ -105,6 +105,7 @@ function ensureSettings(): Record<string, string> {
   // Addresses, not secrets: written once so every process reads the same ones.
   want("APP_URL", () => APP_URL);
   want("PORT", () => "8787");
+  want("HOOKS_URL", () => "http://localhost:8787");
   want("OIDC_ISSUER", () => `${KEYCLOAK}/realms/${REALM}`);
   want("OIDC_CLIENT_ID", () => CLIENT_ID);
   want("OIDC_AUDIENCE", () => AUDIENCE);

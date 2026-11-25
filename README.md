@@ -68,6 +68,20 @@ npm run quirkbooks
 
 Mission Control reaches them only through their APIs, with keys that `npm run setup` writes.
 
+## Start Mission Control
+
+Mission Control is three processes. Start each in its own terminal:
+
+```bash
+npm run gateway
+npm run worker
+npm run web
+```
+
+- **The gateway** holds every key. It routes each model call, checks each tool call and keeps the spend.
+- **The worker** wakes on each new inbox event and runs the teammate. It holds no key.
+- **The web process** (http://localhost:8787) takes the apps' signed notices and serves the board.
+
 ## Check your work
 
 ```bash

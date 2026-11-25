@@ -6,11 +6,18 @@
 export const ROLES = ["admin", "approver"] as const;
 export type Role = (typeof ROLES)[number];
 
-export type Company = { alias: string; name: string; domain: string; currency: string };
+export type Company = {
+  alias: string;
+  name: string;
+  domain: string;
+  currency: string;
+  // The mailbox invoices arrive in, and the one replies go out from.
+  accountsMailbox: string;
+};
 
 // Bramble Studio is a small design studio. Its books are kept in euros.
 export const COMPANIES: Record<string, Company> = {
-  bramble: { alias: "bramble", name: "Bramble Studio", domain: "bramble.example", currency: "EUR" },
+  bramble: { alias: "bramble", name: "Bramble Studio", domain: "bramble.example", currency: "EUR", accountsMailbox: "ap@bramble.example" },
 };
 
 export type SeedPerson = {

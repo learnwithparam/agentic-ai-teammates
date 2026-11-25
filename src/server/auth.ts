@@ -74,6 +74,16 @@ export function readCookie(header: string | undefined, name: string): string | u
   return undefined;
 }
 
+// Where to go after signing in: a path on this app only, never another site. A browser reads
+// "/\\evil.example" as another site, so the path is resolved and its origin compared.
+export function samePagePath(asked: unknown, appUrl: string): string {
+  if (typeof asked !== "string" || !asked.startsWith("/")) return "/";
+  if (/[\\\u0000-\u001f]/.test(asked)) return "/";
+  const resolved = new URL(asked, appUrl);
+  if (resolved.origin !== new URL(appUrl).origin) return "/";
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+}
+
 declare module "express-serve-static-core" {
   interface Request {
     person?: Person;
@@ -127,9 +137,7 @@ export async function createAuth(settings: AuthSettings) {
   const router = express.Router();
 
   router.get("/login", async (request, response) => {
-    const asked = typeof request.query.returnTo === "string" ? request.query.returnTo : "/";
-    // Only a path on this app: never send someone on to another site after signing in.
-    const returnTo = asked.startsWith("/") && !asked.startsWith("//") ? asked : "/";
+    const returnTo = samePagePath(request.query.returnTo, settings.appUrl);
     const codeVerifier = oidc.randomPKCECodeVerifier();
     const state = oidc.randomState();
     const nonce = oidc.randomNonce();

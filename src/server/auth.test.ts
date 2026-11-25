@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
-import { personFromClaims, readCookie, verifyAccessToken } from "./auth";
+import { personFromClaims, readCookie, samePagePath, verifyAccessToken } from "./auth";
 
 // Tokens signed here with a key made for the test, shaped like Keycloak's.
 const ISSUER = "http://localhost:8190/realms/teammates";
@@ -65,4 +65,12 @@ test("an account with no company is refused, and a limit without the approver ro
 test("the session cookie is read by its exact name", () => {
   assert.equal(readCookie("lmail_session=abc; mc_session=xyz", "mc_session"), "xyz");
   assert.equal(readCookie("mc_session_old=1", "mc_session"), undefined);
+});
+
+test("after sign-in a person only ever lands on a page of this app", () => {
+  const app = "http://localhost:3333";
+  assert.equal(samePagePath("/board?teammate=invoice#run", app), "/board?teammate=invoice#run");
+  for (const outside of ["//evil.example", "/\\evil.example", "/\\/evil.example", "https://evil.example", "/\tevil", undefined, 42]) {
+    assert.equal(samePagePath(outside, app), "/", String(outside));
+  }
 });

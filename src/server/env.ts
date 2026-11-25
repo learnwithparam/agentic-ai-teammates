@@ -32,6 +32,7 @@ const SETTINGS = {
   LANGFUSE_PUBLIC_KEY: "The Langfuse project's public key. npm run setup writes the local project's.",
   LANGFUSE_SECRET_KEY: "The Langfuse project's secret key. npm run setup writes the local project's.",
   LANGFUSE_BASE_URL: "The Langfuse address: http://localhost:3100 locally, or your Langfuse Cloud region.",
+  HOOKS_URL: "Where the world apps send their notices: Mission Control's web process. npm run setup writes it.",
   GATEWAY_URL: "Where the worker and dispatcher reach the gateway. npm run setup writes it.",
   GATEWAY_PORT: "The port the gateway listens on. npm run setup writes it.",
   GATEWAY_WORKER_TOKEN: "The worker's key to the gateway. npm run setup writes it.",

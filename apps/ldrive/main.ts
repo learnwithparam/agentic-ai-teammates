@@ -6,7 +6,7 @@ import { requireSettings, setting } from "../../src/server/env";
 import { createS3, ensureBucket } from "../../src/server/s3";
 import { apiKeys } from "../shared/api-keys";
 import { createApp, HttpError, listen, servePage } from "../shared/server";
-import { WebhookSender } from "../shared/webhooks";
+import { requireHookAddress, WebhookSender } from "../shared/webhooks";
 import { BUCKET, DriveStore } from "./store";
 
 // LDrive: Bramble Studio's shared folders. People drop files on its web page; programs read the
@@ -14,7 +14,7 @@ import { BUCKET, DriveStore } from "./store";
 
 requireSettings([
   "LDRIVE_URL", "LDRIVE_PORT", "LDRIVE_DATABASE_URL", "LDRIVE_API_KEY", "LDRIVE_UPLOAD_KEY", "LDRIVE_WEBHOOK_SECRET",
-  "LDRIVE_CLIENT_SECRET", "OIDC_ISSUER", "S3_ENDPOINT", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY",
+  "LDRIVE_CLIENT_SECRET", "OIDC_ISSUER", "HOOKS_URL", "S3_ENDPOINT", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY",
 ]);
 
 const MIGRATIONS = new URL("./migrations", import.meta.url).pathname;
@@ -59,7 +59,7 @@ app.get("/api/v1/changes", requireScope("drive.read"), async (request, response)
 app.post("/api/v1/changes/watch", requireScope("drive.read"), express.json(), async (request, response) => {
   const Channel = z.object({ address: z.url(), token: z.string().min(16).max(256) });
   const { address, token } = Channel.parse(request.body);
-  response.json(await store.watch(address, token, request.client!.name));
+  response.json(await store.watch(requireHookAddress(address, setting("HOOKS_URL")), token, request.client!.name));
 });
 
 app.post("/api/v1/channels/:id/stop", requireScope("drive.read"), async (request, response) => {
@@ -122,8 +122,13 @@ app.post("/api/folders/:id/files", requirePerson, raw, async (request, response)
   response.status(201).json(await store.upload(String(request.params.id), uploadName(request), type, request.body, request.person!.email));
 });
 
+// Only the person who uploaded a file, or an admin, may move it to the trash.
 app.delete("/api/files/:id", requirePerson, async (request, response) => {
-  await store.trash(String(request.params.id));
+  const file = await store.get(String(request.params.id));
+  if (!file) throw new HttpError(404, "No such file.");
+  const person = request.person!;
+  if (file.uploadedBy !== person.email && !person.roles.includes("admin")) throw new HttpError(403, "Only the uploader or an admin can remove this file.");
+  await store.trash(file.id);
   response.status(204).end();
 });
 
