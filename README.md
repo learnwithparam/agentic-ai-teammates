@@ -19,6 +19,24 @@ The design follows the five parts of [Building always-on agents](https://claude.
 
 Nothing here is a stand-in. Every model call is real, and every service is the one you deploy.
 
+## Lessons
+
+Every lesson runs on `main` with the stack up. You read the files and run the real flow. Then you remove one named guard, watch its test fail, and put it back.
+
+| Lesson | What you can do after it |
+| --- | --- |
+| 00 | [Start the stack](./docs/learner/00-start-the-stack.md) |
+| 01 | [Meet the apps your teammates work in](./docs/learner/01-meet-the-world.md) |
+| 02 | [Catch every event in a durable inbox](./docs/learner/02-catch-every-event.md) |
+| 03 | [Bound the agent loop](./docs/learner/03-bound-the-agent-loop.md) |
+| 04 | [Read an invoice with a graph you can trace](./docs/learner/04-read-an-invoice.md) |
+| 05 | [Check every invoice before it posts](./docs/learner/05-check-before-you-post.md) |
+| 06 | [Ask a person before a risky action](./docs/learner/06-ask-before-acting.md) |
+| 07 | [Route each call to the right model](./docs/learner/07-route-to-the-right-model.md) |
+| 08 | [Follow up on time and remember what people decided](./docs/learner/08-remember-and-follow-up.md) |
+| 09 | [Publish the morning news](./docs/learner/09-publish-the-morning-news.md) |
+| 10 | [Send safely, then score the teammate](./docs/learner/10-send-safely-and-score.md) |
+
 ## Start
 
 You need Node `>=22.18.0`, Docker and an [OpenRouter key](https://openrouter.ai/settings/keys).

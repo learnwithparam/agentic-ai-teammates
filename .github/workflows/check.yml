@@ -30,6 +30,10 @@ jobs:
       - name: Install dependencies
         run: npm ci && npm ci --prefix news
 
+      # The lesson check renders every diagram with mermaid-cli.
+      - name: Install mermaid-cli
+        run: npm i -g @mermaid-js/mermaid-cli@11.6.0
+
       - name: Start Postgres, OpenFGA and MinIO
         run: ./.github/start-test-services.sh
 

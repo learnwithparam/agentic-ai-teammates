@@ -1,7 +1,9 @@
 # agentic-ai-teammates
 
 A public workshop repo: Mission Control, always-on AI teammates on the five primitives (inbox,
-timers, memory, permissions, outbox). `main` is the finished app; checkpoint tags hold each lesson.
+timers, memory, permissions, outbox). `main` is the finished app. Each lesson in `docs/learner` runs on `main`: read the files,
+run the flow, then remove one named guard and watch its test fail. There are no checkpoint tags.
+`scripts/lessons.ts` checks every lesson's shape, diagrams and the test it breaks.
 
 ## Rules
 

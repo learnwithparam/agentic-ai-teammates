@@ -71,7 +71,7 @@ export function RunSheet({ runId, onClose }: { runId: string | null; onClose: ()
     <Sheet open={runId !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-md">
         <SheetHeader className="border-b">
-          <SheetTitle className="font-display text-lg">{run ? (run.summary ?? "Working") : "A run"}</SheetTitle>
+          <SheetTitle className="font-display text-lg">The run</SheetTitle>
           <SheetDescription asChild>
             <div className="flex flex-wrap items-center gap-2">
               {run && (stop ? <Tone tone={stop.tone}>{stop.label}</Tone> : <Tone tone="busy">Working</Tone>)}
@@ -85,6 +85,12 @@ export function RunSheet({ runId, onClose }: { runId: string | null; onClose: ()
         </SheetHeader>
         <div className="flex flex-col gap-5 p-4">
           {problem && <p className="text-sm text-fail">{problem}</p>}
+          {run?.summary && (
+            <section>
+              <h3 className="mb-2 text-sm font-semibold">How it ended</h3>
+              <p className="text-sm leading-relaxed">{run.summary}</p>
+            </section>
+          )}
           {!detail && !problem && (
             <div className="flex flex-col gap-3">
               <Skeleton className="h-4 w-2/3" />
