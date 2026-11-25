@@ -64,6 +64,8 @@ export class Run {
   }
 
   async model(ask: ModelAsk): Promise<RoutedAnswer> {
+    // The fixed part comes first in every call, so a provider can cache it across runs.
+    if (ask.messages[0]?.role !== "system") throw new Error(`The ${ask.task} call must start with its rules as the system message.`);
     this.checkCaps();
     const answer = await this.gateway.model(this.ref, { ...ask, mode: this.mode });
     if (answer.tier) {

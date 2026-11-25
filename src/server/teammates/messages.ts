@@ -4,6 +4,7 @@ import { ALWAYS_READ, INSTRUCTIONS, REPORTED } from "../memory";
 import { CapReached, type Run } from "../run";
 import { toolDefinition, type ToolName } from "../tools";
 import type { TeammateDefinition } from "./define";
+import { prompt } from "../prompts";
 
 // What every teammate does when a person writes to it in Mission Control. The web server sets how
 // far it may look. Someone who only views the teammate gets what the board already shows them.
@@ -16,17 +17,9 @@ const Message = z.object({ messageId: z.uuid(), text: Said, from: Said, person: 
 type Message = z.infer<typeof Message>;
 const MemoryText = z.object({ text: z.string().nullable() });
 
-const ANSWER_RULES = `You are an AI teammate at a small company, answering a person who works with you.
-Answer from the facts you are given and from what your tools find. Never guess or make up a number.
-If you do not know, say so and say what would tell you.
-The person may have sent several messages in a row. Answer them together, once.
-You cannot post, send, approve or change anything from this conversation. If the person asks for that, say where they can do it on the board.
-Write plain sentences, at most 120 words. No markdown tables.`;
+const ANSWER_RULES = prompt(import.meta.url, "answer");
 
-const ACT_RULES = `You may also set a follow-up for yourself with team.follow_up when the person asks you to look at something later. You will tell them what you found.
-When the person asks you to do your job on a document, such as posting a bill from an email, find it with your tools and hand it to yourself with team.hand_over. Every check still runs, under the person's own approval limit.
-Keep a line of progress with memory.progress when a task will take more than this conversation, and a fact worth keeping with memory.note.
-Say plainly what you set or handed over, and when.`;
+const ACT_RULES = prompt(import.meta.url, "act");
 
 // Takes the person.message events in a batch, answers each person once, and returns the rest.
 // Three quick messages from one person get one answer, as the article's inbox batching asks.
@@ -76,13 +69,18 @@ export async function standingMemory(run: Run, thread: string, reader: { person:
   return files;
 }
 
+// The system message: the rules, then the memory that loads every run. Both change rarely, so a
+// provider can cache them. What changes each run, and the person's words, come after it.
+export function fixedPart(rules: string, memory: Record<string, string | null>): string {
+  return `${rules}\n\nYour memory:\n${JSON.stringify(memory, null, 2)}`;
+}
+
 async function answer(run: Run, thread: string, messages: Message[], tools: ToolName[]) {
   const last = messages.at(-1) as Message;
   const acts = tools.some((tool) => toolDefinition(tool).modelMayCall);
-  // The fixed part comes first and the person's words last, so the fixed part can be cached.
   const reach = messages.every((message) => message.reach === "tools") ? "tools" : "board";
   const memory = await standingMemory(run, thread, { person: last.person, reach });
-  const context = { yourMemory: memory, now: new Date().toISOString(), person: last.person, ...(await run.talkContext(last.person)) };
+  const context = { now: new Date().toISOString(), person: last.person, ...(await run.talkContext(last.person)) };
   const asked = messages.map((message) => message.text).join("\n\n");
   const result = await run.toolLoop({
     threadId: thread,
@@ -91,7 +89,7 @@ async function answer(run: Run, thread: string, messages: Message[], tools: Tool
     maxTokens: 600,
     tools,
     messages: [
-      { role: "system", content: acts ? `${ANSWER_RULES}\n${ACT_RULES}` : ANSWER_RULES },
+      { role: "system", content: fixedPart(acts ? `${ANSWER_RULES}\n${ACT_RULES}` : ANSWER_RULES, memory) },
       { role: "user", content: `What you know:\n${JSON.stringify(context, null, 2)}\n\n${last.from} asks:\n${asked}` },
     ],
   });

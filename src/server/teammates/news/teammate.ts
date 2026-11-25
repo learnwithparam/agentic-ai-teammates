@@ -13,6 +13,7 @@ export const news = defineTeammate({
   listens: [],
   defaults: { dailyBudgetUsd: 0.5 },
   // It answers questions about the day's news, and never sets work for itself.
-  capabilities: { chat: { mode: "read", reads: ["news.read"] }, followUps: false, digest: true },
+  capabilities: { chat: { mode: "read", reads: ["news.read"] }, followUps: false, digest: true, tidy: false },
+  evaluate: "data/news/eval.ts",
   work: newsTeammate,
 });

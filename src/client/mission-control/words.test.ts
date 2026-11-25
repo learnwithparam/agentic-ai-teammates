@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { axisTicks } from "./words";
+import { axisTicks, tokensRead, volumeLine } from "./words";
 
 test("the spend axis steps in round amounts and reaches past the highest day", () => {
   // The live chart once read $0, $0.0070, $0.01, $0.02 because its steps were 0.0075 apart.
@@ -16,4 +16,15 @@ test("the spend axis steps in round amounts and reaches past the highest day", (
     assert.ok([1, 2, 5].includes(leading), `${highest} steps by ${step}`);
     assert.ok(ticks[ticks.length - 1] >= highest, `${highest} fits under ${ticks.at(-1)}`);
   }
+});
+
+test("a run sheet says how many tokens came from the cache only when some did", () => {
+  assert.equal(tokensRead({ tokens: 1200, cached_tokens: 0 }), "1,200 tokens");
+  assert.equal(tokensRead({ tokens: 1200, cached_tokens: 800 }), "1,200 tokens, 800 read from the cache");
+});
+
+test("the Quiet switch says what the teammate wrote, leaving out what it did not do", () => {
+  const none = { days: 14, onItsOwn: 0, released: 0, discarded: 0, waiting: 0 };
+  assert.equal(volumeLine(none), "It has written nothing in the last 14 days.");
+  assert.equal(volumeLine({ ...none, released: 3, discarded: 1 }), "In the last 14 days: 3 sent by a person, 1 thrown away.");
 });

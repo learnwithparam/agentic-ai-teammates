@@ -9,9 +9,12 @@ import { HttpError } from "../../apps/shared/server";
 // A quiet teammate's messages wait as drafts until a person releases them. Every teammate
 // starts quiet.
 
-export const TARGETS = ["lmail.send", "news.publish"] as const;
+export const TARGETS = ["lmail.send", "news.publish", "memory.tidy"] as const;
 export type Target = (typeof TARGETS)[number];
 export type OutboxStatus = "draft" | "queued" | "sending" | "sent" | "discarded" | "dead";
+
+export type Volume = { onItsOwn: number; released: number; discarded: number; waiting: number };
+export const VOLUME_DAYS = 14;
 
 export type NewMessage = {
   company: string;
@@ -91,6 +94,22 @@ export class Outbox {
     if (rows[0]) return { message: toMessage(rows[0]), first: true };
     const existing = await this.pool.query("SELECT * FROM outbox WHERE idempotency_key = $1", [message.idempotencyKey]);
     return { message: toMessage(existing.rows[0]), first: false };
+  }
+
+  // What each teammate wrote over the last days: what went out on its own, what a person sent,
+  // what a person threw away, and what still waits. It is the case for turning Quiet off.
+  async volume(company: string, days: number): Promise<Map<string, Volume>> {
+    const { rows } = await this.pool.query<{ teammate: string } & Record<keyof Volume, number>>(
+      `SELECT teammate,
+         count(*) FILTER (WHERE status IN ('queued', 'sending', 'sent') AND released_by IS NULL)::int AS "onItsOwn",
+         count(*) FILTER (WHERE status IN ('queued', 'sending', 'sent') AND released_by IS NOT NULL)::int AS "released",
+         count(*) FILTER (WHERE status = 'discarded')::int AS "discarded",
+         count(*) FILTER (WHERE status = 'draft')::int AS "waiting"
+       FROM outbox WHERE company = $1 AND created_at >= now() - make_interval(days => $2)
+       GROUP BY teammate`,
+      [company, days],
+    );
+    return new Map(rows.map(({ teammate, ...volume }) => [teammate, volume]));
   }
 
   async list(company: string, statuses?: OutboxStatus[]): Promise<OutboxMessage[]> {

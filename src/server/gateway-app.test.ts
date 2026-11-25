@@ -508,6 +508,31 @@ test("a model can never read reported.md whole: the core reads one person's line
   assert.equal(own.result.text, `- ${MEI.email}: Lumen is posted.\n`);
 });
 
+// The weekly tidy proposes a note's new lines. Even a teammate that is not quiet writes a draft.
+// The note changes when a person sends it, to exactly the lines they read.
+test("a tidy is always a draft, and sending it replaces the note with the lines a person read", async () => {
+  const before = await pool.query<{ quiet: boolean }>("SELECT quiet FROM teammates WHERE company = 'bramble' AND id = 'invoices'");
+  await pool.query("UPDATE teammates SET quiet = false WHERE company = 'bramble' AND id = 'invoices'");
+  const runId = await startRun("invoices");
+  const scope = { runId, company: "bramble", teammate: "invoices", threadId: "timer:tidy" };
+  const mates = { company: "bramble", teammate: "invoices" };
+  for (const line of ["Lumen bank NL01.", "Lumen bank NL01.", "Lumen moved to NL02, confirmed by Ada."]) await memory.addLine(mates, "vendor-tidy", line);
+  const lines = ["Lumen moved to NL02, confirmed by Ada."];
+  const proposed = await callTool("memory.propose_tidy", { ...scope, args: { topic: "vendor-tidy", lines, why: "The old account was replaced." } });
+  const { rows } = await pool.query("SELECT status, target, idempotency_key, payload FROM outbox WHERE id = $1", [proposed.result.outboxId]);
+  assert.equal(rows[0].status, "draft");
+  assert.equal(rows[0].target, "memory.tidy");
+  assert.match(await memory.read(mates, "notes/vendor-tidy.md") ?? "", /NL01/);
+  const response = await fetch(`${base}/dispatch/memory.tidy`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${DISPATCHER}` },
+    body: JSON.stringify({ company: "bramble", idempotencyKey: rows[0].idempotency_key, payload: rows[0].payload }),
+  });
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.equal(await memory.read(mates, "notes/vendor-tidy.md"), "- Lumen moved to NL02, confirmed by Ada.\n");
+  await pool.query("UPDATE teammates SET quiet = $1 WHERE company = 'bramble' AND id = 'invoices'", [before.rows[0].quiet]);
+});
+
 test("a model is offered a small write only for a teammate whose chat acts", async () => {
   const offer = async (teammate: string, tools: string[]) => {
     const runId = await startRun(teammate);

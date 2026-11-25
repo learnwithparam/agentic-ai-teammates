@@ -152,6 +152,15 @@ This screens and reads every case with real model calls, then runs the checks ag
 
 The table counts the right cases and the wrong postings. It also shows the cost per 100 invoices. The run fails if any invoice would post that should wait. With `--routing all` it also scores each model alone.
 
+Each teammate names its own eval in its definition. This runs one teammate's eval, or every one:
+
+```bash
+npm run teammate:eval -- news
+npm run teammate:eval -- all
+```
+
+The news eval feeds the screen plain articles and articles that try to steer it. It fails if a steering article passes, or if a plain one is held back.
+
 ## Check your work
 
 ```bash

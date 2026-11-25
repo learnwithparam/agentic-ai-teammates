@@ -13,7 +13,7 @@ import { handleMessages } from "./messages";
 
 // A teammate whose chat reads with the given tools.
 function reading(reads: ToolName[]) {
-  return { tools: ["memory.read", "memory.reported", ...reads] as ToolName[], capabilities: { chat: { mode: "read" as const, reads }, followUps: false, digest: false } };
+  return { tools: ["memory.read", "memory.reported", ...reads] as ToolName[], capabilities: { chat: { mode: "read" as const, reads }, followUps: false, digest: false, tidy: false } };
 }
 
 // A person's question against a real Postgres. The gateway answers from a script, so the test
@@ -67,9 +67,10 @@ test("a teammate answers a person once, from read-only tools and its own recent 
 
   assert.deepEqual(asks[0].tools, ["memory.read", "books.find_vendor"]);
   assert.equal(asks[0].task, "answer");
-  const told = asks[0].messages.at(-1)?.content ?? "";
-  assert.match(String(told), /Ask before paying Lumen/);
-  assert.match(String(told), /waitingForAPerson/);
+  // The rules and the memory come first, so they can be cached. What changes each run comes after.
+  assert.match(String(asks[0].messages[0].content), /Ask before paying Lumen/);
+  assert.match(String(asks[0].messages.at(-1)?.content), /waitingForAPerson/);
+  assert.doesNotMatch(String(asks[0].messages[0].content), /waitingForAPerson|What waits for me/);
   const lines = await conversation(pool, "bramble", "invoices", MEI);
   assert.deepEqual(lines.map((line) => [line.role, line.text]), [["person", "What waits for me?"], ["teammate", "Nothing waits for you today."]]);
 });
@@ -132,9 +133,9 @@ test("a viewer's answer reads only the instructions, and a person reads only wha
 
   await handleMessages(await start(), [messageEvent(randomUUID(), "What did you post?", "board")], reading([]));
   assert.deepEqual(read, ["instructions.md"]);
-  assert.match(String(asks[0].messages.at(-1)?.content), /"yourMemory": \{\s+"instructions.md": "Ask before paying Lumen."\s+\}/);
+  assert.match(String(asks[0].messages[0].content), /Your memory:\n\{\s+"instructions.md": "Ask before paying Lumen."\s+\}$/);
 
   await handleMessages(await start(), [messageEvent(randomUUID(), "What did you post?", "tools")], reading([]));
   assert.deepEqual(read.slice(1), ["instructions.md", "index.md", `reported for ${MEI}`]);
-  assert.match(String(asks[1].messages.at(-1)?.content), /Lumen's bill is posted/);
+  assert.match(String(asks[1].messages[0].content), /Lumen's bill is posted/);
 });

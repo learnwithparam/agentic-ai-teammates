@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, type Decision, get, Instructions, type SignedIn, post, Rules, type Teammate } from "./api";
+import { volumeLine } from "./words";
 
 // How one teammate behaves. Only an admin changes it; everyone else reads it. Every change here
 // lands in the audit log with who made it.
@@ -58,7 +59,10 @@ function Behaviour({ teammate, admin, onSaved }: { teammate: Teammate; admin: bo
           <Switch id="paused" checked={paused} onCheckedChange={setPaused} disabled={!admin} />
         </div>
         <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-          <Label htmlFor="quiet">Quiet</Label>
+          <div className="flex flex-col gap-0.5">
+            <Label htmlFor="quiet">Quiet</Label>
+            <p className="text-xs text-muted-foreground">{volumeLine(teammate.volume)}</p>
+          </div>
           <Switch id="quiet" checked={quiet} onCheckedChange={setQuiet} disabled={!admin} />
         </div>
         {teammate.kind === "invoice" && (

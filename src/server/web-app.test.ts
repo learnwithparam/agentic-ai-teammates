@@ -383,7 +383,7 @@ test("every answer Mission Control reads matches the shape the page expects", as
   await pool.query("UPDATE approvals SET args = args || jsonb_build_object('source', $2::jsonb) WHERE id = $1", [approval.id, JSON.stringify(fromDrive)]);
   const run = approval.runId;
   await pool.query("INSERT INTO run_steps (run_id, kind, title, detail) VALUES ($1, 'check', 'Ran the invoice checks', $2)", [run, JSON.stringify({ failed: ["po_over_tolerance"] })]);
-  await recordSpend(pool, { company: "bramble", teammate: "invoices", runId: run, tier: "fast", task: "extract", inputTokens: 900, outputTokens: 200, costUsd: 0.0012 });
+  await recordSpend(pool, { company: "bramble", teammate: "invoices", runId: run, tier: "fast", task: "extract", inputTokens: 900, cachedTokens: 600, outputTokens: 200, costUsd: 0.0012 });
   await new Outbox(pool).add({
     company: "bramble", teammate: "invoices", runId: run, target: "lmail.send", title: "Reply to Lumen", idempotencyKey: `test:${run}`,
     payload: { to: "billing@lumen.example", subject: "Your invoice", text: "Thanks, it is with an approver." }, status: "draft",
@@ -401,6 +401,10 @@ test("every answer Mission Control reads matches the shape the page expects", as
   assert.ok(board.approvals.some((item) => item.id === approval.id));
   assert.ok(board.outbox.some((item) => item.status === "draft"));
   assert.ok(board.spend.length > 0);
+  // The run carries the tokens the provider read from its cache, for the run sheet.
+  assert.equal(board.runs.find((item) => item.id === run)?.cached_tokens, 600);
+  // The draft above is one the teammate wrote and nobody has sent yet.
+  assert.ok((board.teammates.find((mate) => mate.id === "invoices")?.volume.waiting ?? 0) >= 1);
   const detail = await read(`/api/runs/${run}`, client.RunDetail);
   assert.ok(detail.steps.length > 0);
   await read("/api/me", client.SignedIn);

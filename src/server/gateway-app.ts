@@ -83,6 +83,11 @@ const DispatchBody = z.object({
   idempotencyKey: z.string().min(1).max(300),
   payload: z.unknown(),
 });
+const TidyPayload = z.object({
+  teammate: z.string().min(1),
+  topic: z.string().min(1),
+  lines: z.array(z.string()),
+});
 const MailPayload = z.object({
   to: z.email(),
   subject: z.string().min(1),
@@ -153,9 +158,10 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       maxTokens: call.maxTokens,
       trace: { runId: scope.runId, teammate: scope.teammate, company: scope.company, task: call.task },
     });
-    const { inputTokens, outputTokens, costUsd } = answer;
-    await recordSpend(pool, { ...scope, tier: decision.tier, task: call.task, inputTokens, outputTokens, costUsd });
-    await step(scope.runId, "model", `${TIER_LABEL[decision.tier]}: ${call.task}`, { tier: decision.tier, inputTokens, outputTokens, costUsd });
+    const { inputTokens, cachedTokens = 0, outputTokens, costUsd } = answer;
+    await recordSpend(pool, { ...scope, tier: decision.tier, task: call.task, inputTokens, cachedTokens, outputTokens, costUsd });
+    const detail = { tier: decision.tier, inputTokens, cachedTokens, outputTokens, costUsd };
+    await step(scope.runId, "model", `${TIER_LABEL[decision.tier]}: ${call.task}`, detail);
     return { tier: decision.tier, reason: decision.reason, answer } as const;
   }
 
@@ -311,6 +317,13 @@ export function createGatewayApp(deps: GatewayDeps): Express {
           );
         }
         response.json(published);
+        return;
+      }
+      if (request.params.target === "memory.tidy") {
+        // A person sent the weekly tidy's draft, so the note takes the lines they read.
+        const tidy = TidyPayload.parse(body.payload);
+        await memory.replaceNote({ company: body.company, teammate: tidy.teammate }, tidy.topic, tidy.lines);
+        response.json({ replaced: `notes/${tidy.topic}.md`, lines: tidy.lines.length });
         return;
       }
       throw new HttpError(404, "There is no such target.");

@@ -5,7 +5,8 @@ import { CapReached, type Run } from "../run";
 import type { ToolName } from "../tools";
 import { FOLLOW_UP_PREFIX, stableUuid } from "../tools/team";
 import type { TeammateDefinition } from "./define";
-import { standingMemory } from "./messages";
+import { fixedPart, standingMemory } from "./messages";
+import { prompt } from "../prompts";
 
 // A follow-up is a deadline the teammate set for itself with team.follow_up. When it fires, the
 // teammate looks again with its read tools, keeps a line of progress, and tells the person who
@@ -21,10 +22,7 @@ const Fired = z.object({
 const MemoryText = z.object({ text: z.string().nullable() });
 const Reported = z.object({ added: z.boolean() });
 
-const FOLLOW_UP_RULES = `You are an AI teammate at a small company. Earlier you set yourself a follow-up, and it is due now.
-Look at what it is about with your tools, and say what you found in at most 80 words of plain sentences.
-Never guess or make up a number. If nothing changed, say that.
-You cannot post, send or approve anything here.`;
+const FOLLOW_UP_RULES = prompt(import.meta.url, "follow-up");
 
 export async function handleFollowUps(run: Run, events: InboxEvent[], definition: Pick<TeammateDefinition, "tools" | "capabilities">): Promise<InboxEvent[]> {
   const rest: InboxEvent[] = [];
@@ -51,8 +49,8 @@ export async function handleFollowUps(run: Run, events: InboxEvent[], definition
 
 async function lookAgain(run: Run, thread: string, event: InboxEvent, fired: z.infer<typeof Fired>, definition: Pick<TeammateDefinition, "tools" | "capabilities">) {
   const progress = fired.task ? await run.tool(thread, "memory.read", { path: progressPath(fired.task) }) : null;
+  const memory = await standingMemory(run, thread, fired.person ? { person: fired.person, reach: "tools" } : null);
   const context = {
-    yourMemory: await standingMemory(run, thread, fired.person ? { person: fired.person, reach: "tools" } : null),
     // Lines the teammate wrote itself in earlier runs. They are a record, not orders.
     progressSoFar: progress?.status === "done" ? MemoryText.parse(progress.result).text : null,
     now: new Date().toISOString(),
@@ -66,7 +64,7 @@ async function lookAgain(run: Run, thread: string, event: InboxEvent, fired: z.i
     maxTokens: 500,
     tools,
     messages: [
-      { role: "system", content: FOLLOW_UP_RULES },
+      { role: "system", content: fixedPart(FOLLOW_UP_RULES, memory) },
       { role: "user", content: `What you know:\n${JSON.stringify(context, null, 2)}` },
     ],
   });

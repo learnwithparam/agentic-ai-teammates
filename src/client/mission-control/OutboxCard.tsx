@@ -10,6 +10,7 @@ import { targetLabel, when } from "./words";
 const Mail = z.object({ to: z.string(), subject: z.string().optional(), text: z.string() });
 const NewsCard = z.object({ headline: z.string(), source: z.string() });
 const News = z.object({ day: z.string(), cards: z.array(NewsCard) });
+const Tidy = z.object({ topic: z.string(), lines: z.array(z.string()), why: z.string() });
 
 function Preview({ message }: { message: OutboxMessage }) {
   const mail = message.target === "lmail.send" ? Mail.safeParse(message.payload) : null;
@@ -32,6 +33,19 @@ function Preview({ message }: { message: OutboxMessage }) {
           </li>
         ))}
       </ol>
+    );
+  }
+  const tidy = message.target === "memory.tidy" ? Tidy.safeParse(message.payload) : null;
+  if (tidy?.success) {
+    return (
+      <div className="rounded-md bg-muted px-3 py-2 text-sm">
+        <p className="text-xs text-muted-foreground">{tidy.data.why}</p>
+        <ul className="mt-1 flex list-disc flex-col gap-0.5 pl-5">
+          {tidy.data.lines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      </div>
     );
   }
   return null;

@@ -28,6 +28,8 @@ test("every tool is used by some teammate, and every teammate has its own folder
   for (const teammate of TEAMMATES) {
     const folder = path.join(import.meta.dirname, teammate.kind);
     for (const file of ["teammate.ts", "work.ts", "graph.ts"]) assert.ok(existsSync(path.join(folder, file)), `${teammate.kind} has no ${file}`);
+    // Every teammate is scored before anyone turns Quiet off.
+    assert.ok(existsSync(path.join(import.meta.dirname, "../../..", teammate.evaluate)), `${teammate.kind}'s eval ${teammate.evaluate} is missing`);
   }
 });
 

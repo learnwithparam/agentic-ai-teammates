@@ -56,7 +56,7 @@ test("a loop that never answers stops at the step limit and goes to a person", a
   const run = await startRun(scriptedGateway(script));
   const result = await run.toolLoop({
     threadId: "thread-steps", task: "investigate", risk: "high", maxTokens: 500,
-    messages: [{ role: "user", content: "Why does this invoice fail?" }], tools: ["books.find_vendor"],
+    messages: [{ role: "system", content: "Find out why." }, { role: "user", content: "Why does this invoice fail?" }], tools: ["books.find_vendor"],
   });
   assert.ok("handed" in result);
   assert.equal(script.toolCalls.length, RUN_CAPS.maxLoopSteps);
@@ -73,7 +73,7 @@ test("a run that reaches its dollar limit makes no more calls and keeps its curs
   const script: Script = { answer: expensive, toolCalls: [] };
   const run = await startRun(scriptedGateway(script));
   run.advanceCursor("mail", "99");
-  const ask = { task: "extract" as const, risk: "low" as const, prior: [], messages: [], maxTokens: 500 };
+  const ask = { task: "extract" as const, risk: "low" as const, prior: [], messages: [{ role: "system" as const, content: "Read the invoice." }], maxTokens: 500 };
   await run.model(ask);
   await run.model(ask);
   await assert.rejects(run.model(ask), CapReached);
@@ -90,7 +90,7 @@ test("a run that reaches its dollar limit makes no more calls and keeps its curs
 test("a run that reaches its token limit stops the same way", async () => {
   const big = (): ModelAnswer => ({ content: "{}", toolCalls: [], inputTokens: RUN_CAPS.maxTokens, outputTokens: 1, costUsd: 0.001 });
   const run = await startRun(scriptedGateway({ answer: big, toolCalls: [] }));
-  const ask = { task: "extract" as const, risk: "low" as const, prior: [], messages: [], maxTokens: 500 };
+  const ask = { task: "extract" as const, risk: "low" as const, prior: [], messages: [{ role: "system" as const, content: "Read the invoice." }], maxTokens: 500 };
   await run.model(ask);
   await assert.rejects(run.model(ask), CapReached);
 });
@@ -112,4 +112,13 @@ test("a failed run saves no cursor", async () => {
   run.advanceCursor("drive", "55");
   assert.equal(await run.finish("LMail did not answer."), "failed");
   assert.equal(await readCursor(pool, "bramble", "invoices", "drive"), null);
+});
+
+test("a model call that does not start with its rules is refused before it costs anything", async () => {
+  let asked = 0;
+  const script: Script = { answer: (call) => ((asked = call), lookAgain(call)), toolCalls: [] };
+  const run = await startRun(scriptedGateway(script));
+  const ask = { task: "answer" as const, risk: "low" as const, prior: [], maxTokens: 64, messages: [{ role: "user" as const, content: "Hi" }] };
+  await assert.rejects(run.model(ask), /must start with its rules/);
+  assert.equal(asked, 0);
 });

@@ -11,6 +11,7 @@ export type SpendRow = {
   tier: Tier;
   task: string;
   inputTokens: number;
+  cachedTokens?: number;
   outputTokens: number;
   costUsd: number;
 };
@@ -31,13 +32,13 @@ export async function budgetLeft(pool: Pool, company: string, teammate: string):
 
 export async function recordSpend(pool: Pool, row: SpendRow) {
   await pool.query(
-    `INSERT INTO spend (company, teammate, run_id, tier, task, input_tokens, output_tokens, cost_usd)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [row.company, row.teammate, row.runId, row.tier, row.task, row.inputTokens, row.outputTokens, row.costUsd],
+    `INSERT INTO spend (company, teammate, run_id, tier, task, input_tokens, cached_tokens, output_tokens, cost_usd)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [row.company, row.teammate, row.runId, row.tier, row.task, row.inputTokens, row.cachedTokens ?? 0, row.outputTokens, row.costUsd],
   );
   if (row.runId) {
-    await pool.query("UPDATE runs SET tokens = tokens + $2, cost_usd = cost_usd + $3 WHERE id = $1", [
-      row.runId, row.inputTokens + row.outputTokens, row.costUsd,
+    await pool.query("UPDATE runs SET tokens = tokens + $2, cached_tokens = cached_tokens + $3, cost_usd = cost_usd + $4 WHERE id = $1", [
+      row.runId, row.inputTokens + row.outputTokens, row.cachedTokens ?? 0, row.costUsd,
     ]);
   }
 }

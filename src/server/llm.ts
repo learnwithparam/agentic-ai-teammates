@@ -23,6 +23,8 @@ export type ModelAnswer = {
   content: string | null;
   toolCalls: Array<{ id: string; name: string; arguments: string }>;
   inputTokens: number;
+  // The part of inputTokens the provider read from its prompt cache, as it reports it.
+  cachedTokens?: number;
   outputTokens: number;
   costUsd: number;
 };
@@ -44,7 +46,7 @@ export function createModelClient(apiKey: string) {
           const answer = await send(request, model);
           generation.update({
             output: answer.content ?? answer.toolCalls,
-            usageDetails: { input: answer.inputTokens, output: answer.outputTokens },
+            usageDetails: { input: answer.inputTokens, output: answer.outputTokens, cache_read_input_tokens: answer.cachedTokens ?? 0 },
             costDetails: { total: answer.costUsd },
           });
           return answer;
@@ -75,6 +77,7 @@ export function createModelClient(apiKey: string) {
       content: message.content ?? null,
       toolCalls,
       inputTokens: usage.prompt_tokens,
+      cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
       outputTokens: usage.completion_tokens,
       costUsd: usage.cost,
     };

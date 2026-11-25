@@ -1,4 +1,4 @@
-import { DIGEST, defineTeammate } from "../define";
+import { DIGEST, defineTeammate, TIDY } from "../define";
 import { invoiceTeammate } from "./work";
 
 export const invoice = defineTeammate({
@@ -23,12 +23,13 @@ export const invoice = defineTeammate({
     "memory.note",
     "memory.progress",
     "memory.report",
+    "memory.propose_tidy",
     "team.remind",
     "team.digest",
     "team.follow_up",
     "team.hand_over",
   ],
-  schedules: [DIGEST],
+  schedules: [DIGEST, TIDY],
   listens: ["mail", "drive"],
   defaults: { dailyBudgetUsd: 1 },
   capabilities: {
@@ -36,6 +37,9 @@ export const invoice = defineTeammate({
     chat: { mode: "act", reads: ["books.find_vendor", "books.purchase_order", "books.vendor_bills", "mail.history", "mail.message", "drive.changes"] },
     followUps: true,
     digest: true,
+    // Its vendor notes grow with every invoice, so once a week it proposes shorter ones.
+    tidy: true,
   },
+  evaluate: "data/invoices/run.ts",
   work: invoiceTeammate,
 });

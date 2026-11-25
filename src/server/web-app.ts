@@ -9,7 +9,7 @@ import { conversation, MAX_MESSAGE, say } from "./conversation";
 import type { Person } from "./auth";
 import { createHooksRouter, type GoogleHooks } from "./hooks";
 import { Inbox } from "./inbox";
-import { Outbox } from "./outbox";
+import { Outbox, VOLUME_DAYS } from "./outbox";
 import { COMPANIES } from "./people";
 import type { Check } from "./permissions";
 import { rules, setRule } from "./policy";
@@ -135,7 +135,7 @@ export function createWebApp(deps: WebDeps): Express {
       if (await check(who, "can_view", { type: "teammate", id: `${company}-${row.id}`, company })) visible.push(row);
     }
     const ids = visible.map((row) => row.id);
-    const [events, runs, pending, decided, messages, spend] = await Promise.all([
+    const [events, runs, pending, decided, messages, spend, volume] = await Promise.all([
       pool.query(
         `SELECT id, teammate, source, type, status, attempts, error, run_id, received_at FROM inbox_events
          WHERE company = $1 AND teammate = ANY($2) AND (status IN ('queued', 'claimed', 'dead') OR received_at > now() - interval '1 day')
@@ -143,7 +143,7 @@ export function createWebApp(deps: WebDeps): Express {
         [company, ids],
       ),
       pool.query(
-        `SELECT id, teammate, status, stop_reason, summary, threads, steps, tokens, cost_usd, started_at, finished_at FROM runs
+        `SELECT id, teammate, status, stop_reason, summary, threads, steps, tokens, cached_tokens, cost_usd, started_at, finished_at FROM runs
          WHERE company = $1 AND teammate = ANY($2) ORDER BY started_at DESC LIMIT 50`,
         [company, ids],
       ),
@@ -151,6 +151,7 @@ export function createWebApp(deps: WebDeps): Express {
       pool.query("SELECT id FROM approvals WHERE company = $1 AND status <> 'pending' ORDER BY decided_at DESC LIMIT 30", [company]),
       outbox.list(company),
       spendByDay(pool, company, 14),
+      outbox.volume(company, VOLUME_DAYS),
     ]);
     const recent = await Promise.all(decided.rows.map((row) => approvals.get(company, row.id)));
     const shown = (teammate: string) => ids.includes(teammate);
@@ -165,6 +166,7 @@ export function createWebApp(deps: WebDeps): Express {
         dailyBudgetUsd: Number(row.daily_budget_usd),
         waiting: row.waiting,
         lastRun: row.last_run,
+        volume: { days: VOLUME_DAYS, ...(volume.get(row.id) ?? { onItsOwn: 0, released: 0, discarded: 0, waiting: 0 }) },
       })),
       inbox: events.rows,
       runs: runs.rows.map((row) => ({ ...row, cost_usd: Number(row.cost_usd) })),

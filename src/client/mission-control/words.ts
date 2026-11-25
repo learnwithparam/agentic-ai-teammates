@@ -43,6 +43,7 @@ export function reasonText(code: string): string {
 const TARGETS: Record<OutboxMessage["target"], string> = {
   "lmail.send": "Reply by mail",
   "news.publish": "Publish the news",
+  "memory.tidy": "Tidy a note",
 };
 
 export function targetLabel(target: OutboxMessage["target"]): string {
@@ -67,6 +68,25 @@ export function formatMoney(amount: number | null | undefined, currency: string 
 }
 
 // Model spend is fractions of a cent, so it keeps more places than an invoice does.
+// How many tokens a run used, and how many of them the provider read from its prompt cache.
+export function tokensRead(run: { tokens: number; cached_tokens: number }): string {
+  const used = `${run.tokens.toLocaleString("en")} tokens`;
+  return run.cached_tokens > 0 ? `${used}, ${run.cached_tokens.toLocaleString("en")} read from the cache` : used;
+}
+
+// What a teammate wrote over the last two weeks, in one line for the Quiet switch.
+export function volumeLine(volume: { days: number; onItsOwn: number; released: number; discarded: number; waiting: number }): string {
+  const parts = [
+    [volume.onItsOwn, "went out on its own"],
+    [volume.released, "sent by a person"],
+    [volume.discarded, "thrown away"],
+    [volume.waiting, "still waiting"],
+  ] as const;
+  const said = parts.filter(([count]) => count > 0).map(([count, what]) => `${count} ${what}`);
+  const days = `the last ${volume.days} days`;
+  return said.length ? `In ${days}: ${said.join(", ")}.` : `It has written nothing in ${days}.`;
+}
+
 export function formatSpend(usd: number): string {
   if (usd === 0) return "$0";
   if (usd < 0.01) return `$${usd.toFixed(4)}`;

@@ -16,9 +16,19 @@ const RunSummary = z.object({
   finished_at: z.string().nullable(),
 });
 
+// What a teammate wrote over the last days, the case for turning Quiet off.
+const Volume = z.object({
+  days: z.number(),
+  onItsOwn: z.number(),
+  released: z.number(),
+  discarded: z.number(),
+  waiting: z.number(),
+});
+
 export const Teammate = z.object({
   id: z.string(),
-  kind: z.enum(["invoice", "news"]),
+  // The registry on the server is the one list of kinds, so the page takes any.
+  kind: z.string(),
   name: z.string(),
   paused: z.boolean(),
   quiet: z.boolean(),
@@ -26,6 +36,7 @@ export const Teammate = z.object({
   dailyBudgetUsd: z.number(),
   waiting: z.number(),
   lastRun: RunSummary.nullable(),
+  volume: Volume,
 });
 export type Teammate = z.infer<typeof Teammate>;
 
@@ -47,6 +58,7 @@ export const Run = RunSummary.extend({
   threads: z.array(z.string()).nullable(),
   steps: z.number(),
   tokens: z.number(),
+  cached_tokens: z.number(),
   cost_usd: z.number(),
 });
 export type Run = z.infer<typeof Run>;
@@ -99,7 +111,7 @@ export const OutboxMessage = z.object({
   id: z.string(),
   teammate: z.string(),
   runId: z.string().nullable(),
-  target: z.enum(["lmail.send", "news.publish"]),
+  target: z.enum(["lmail.send", "news.publish", "memory.tidy"]),
   title: z.string(),
   payload: z.unknown(),
   status: z.enum(["draft", "queued", "sending", "sent", "discarded", "dead"]),

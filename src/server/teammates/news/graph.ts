@@ -7,12 +7,14 @@ import { dedupe, EDITION_SIZE, editionProblems } from "../../news/edition";
 import type { SourceReport, Story } from "../../news/sources";
 import type { Run, StopReason } from "../../run";
 import type { Card } from "../../tools";
+import { screen } from "../screen";
+import { prompt } from "../../prompts";
 
 // The news teammate's day, as one LangGraph graph. The roles a newsroom has are nodes, not
 // separate agents: only "select" and "write" call a model, and every other step is plain code.
 // Each day is its own thread, so a run that stops part way picks up at its last finished step.
 //
-//   collect -> dedupe -> select -> write -> check -> publish
+//   collect -> dedupe -> select -> write (screen each article first) -> check -> publish
 //   publish needs a person: wait -> publish_approved
 
 export type Result = { outcome: StopReason; note: string };
@@ -72,16 +74,9 @@ const Collected = z.object({ audience: z.string(), stories: z.array(CandidateSch
 const Article = z.object({ text: z.string().nullable(), reason: z.string().nullable() });
 const Instructions = z.object({ text: z.string().nullable() });
 
-const SELECT_RULES = `You are the editor of a short daily news briefing. Choose the stories this audience would act on or talk about today.
-Rank the best first. Leave out adverts, sales, listicles, and stories that only matter to people outside the audience.
-Never choose two stories about the same event. Answer with the ids from the list only; an empty list is a fair answer on a quiet day.
-For each pick, say in one sentence why this audience should care.`;
+const SELECT_RULES = prompt(import.meta.url, "select");
 
-const WRITE_RULES = `You write one card of a daily news briefing from the text of one article.
-Use only what the article says. Never add a number, a name or a claim that is not in the text.
-headline: plain and specific, at most 90 characters. bullets: three facts from the article, each at most 160 characters.
-whyItMatters: one sentence for the audience, at most 220 characters. topic: one or two words, such as "AI tools" or "Branding".
-Set usable to false when the text is not a news story, such as a sale page, a cookie notice or a list of links.`;
+const WRITE_RULES = prompt(import.meta.url, "write");
 
 export function newsGraph(checkpointer: BaseCheckpointSaver, runOf: (runId: string) => Run) {
   const runFor = (config: LangGraphRunnableConfig) => runOf(String(config.configurable?.run_id));
@@ -141,6 +136,13 @@ export function newsGraph(checkpointer: BaseCheckpointSaver, runOf: (runId: stri
       const article = read.status === "done" ? Article.parse(read.result) : { text: null, reason: "The gateway did not read it." };
       if (!article.text || article.text.length < MIN_ARTICLE_CHARS) {
         skipped.push(`${story.title}: ${article.reason ?? "the page holds too little text"}`);
+        continue;
+      }
+      // An article is text from the open web, so it is screened before a model writes from it.
+      const screened = await screen(run, article.text);
+      if ("handed" in screened) return { cards, skipped, result: { outcome: "handed_to_human", note: screened.handed } };
+      if (screened.injection) {
+        skipped.push(`${story.title}: the page holds instructions for an AI (${screened.reason})`);
         continue;
       }
       const messages = [

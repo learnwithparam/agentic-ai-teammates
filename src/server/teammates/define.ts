@@ -12,6 +12,9 @@ export type Schedule = { name: string; cron: string };
 // The day's summary, at six on a working evening.
 export const DIGEST: Schedule = { name: "digest", cron: "0 18 * * 1-5" };
 
+// The weekly tidy of its notes, early on a Monday, before the week's work.
+export const TIDY: Schedule = { name: "tidy", cron: "0 7 * * 1" };
+
 // The webhook sources a teammate can wake on: new mail in the accounts mailbox, a new file in the drive.
 export type HookSource = "mail" | "drive";
 
@@ -24,6 +27,8 @@ export type Capabilities = {
   followUps: boolean;
   // It sends the day's summary when its digest schedule fires.
   digest: boolean;
+  // Once a week it reads its notes and proposes shorter ones, as drafts a person sends or discards.
+  tidy: boolean;
 };
 
 export type TeammateDefinition = {
@@ -40,6 +45,9 @@ export type TeammateDefinition = {
   listens: HookSource[];
   defaults: { dailyBudgetUsd: number };
   capabilities: Capabilities;
+  // The script that scores this teammate with real model calls, from the repo root. It is the
+  // evidence for turning Quiet off: npm run teammate:eval -- <kind> runs it.
+  evaluate: string;
   // Builds the function that turns one batch of inbox events into work.
   work: (checkpointer: BaseCheckpointSaver) => Teammate;
 };
@@ -63,6 +71,10 @@ export function defineTeammate(teammate: TeammateDefinition): TeammateDefinition
   if (teammate.capabilities.digest) {
     missing("team.digest", "sends a digest");
     if (!teammate.schedules.some((schedule) => schedule.name === DIGEST.name)) throw new Error(`${teammate.kind} sends a digest, so it needs the digest schedule.`);
+  }
+  if (teammate.capabilities.tidy) {
+    missing("memory.propose_tidy", "tidies its notes");
+    if (!teammate.schedules.some((schedule) => schedule.name === TIDY.name)) throw new Error(`${teammate.kind} tidies its notes, so it needs the tidy schedule.`);
   }
   return teammate;
 }

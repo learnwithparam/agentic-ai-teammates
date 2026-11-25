@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { get, RunDetail, type Step } from "./api";
 import { Tone } from "./Tone";
-import { duration, eventLabel, formatSpend, sourceLabel, STOP_REASONS, when } from "./words";
+import { duration, eventLabel, formatSpend, sourceLabel, STOP_REASONS, tokensRead, when } from "./words";
 
 // One run, step by step, in the words the teammate wrote while it worked. Which model ran a step
 // stays in the trace; the step says only "Quick check" or "Deeper look".
@@ -77,7 +77,7 @@ export function RunSheet({ runId, onClose }: { runId: string | null; onClose: ()
               {run && (stop ? <Tone tone={stop.tone}>{stop.label}</Tone> : <Tone tone="busy">Working</Tone>)}
               {run && (
                 <span>
-                  Started {when(run.started_at)}, took {duration(run.started_at, run.finished_at)}, cost {formatSpend(run.cost_usd)}
+                  Started {when(run.started_at)}, took {duration(run.started_at, run.finished_at)}, cost {formatSpend(run.cost_usd)}, {tokensRead(run)}
                 </span>
               )}
             </div>
