@@ -75,7 +75,7 @@ test("GDELT's dates are read, and a plain-text answer is an error, not an empty 
 });
 
 test("the reader refuses every address that is not on the public internet", async () => {
-  for (const address of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "192.168.0.1", "::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a00:1", "fd00::1"]) {
+  for (const address of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "192.168.0.1", "::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a00:1", "fd00::1", "::7f00:1", "64:ff9b::7f00:1", "64:ff9b:1::1", "2002:7f00:1::1", "2001:0:4136:e378::1", "2001:db8::1", "fec0::1"]) {
     assert.equal(isPublicAddress(address), false, address);
   }
   for (const address of ["93.184.215.14", "2606:4700::6810:84e5", "::ffff:93.184.215.14"]) assert.equal(isPublicAddress(address), true, address);

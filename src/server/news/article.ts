@@ -23,8 +23,14 @@ for (const [network, prefix] of [
 ] as const) {
   PRIVATE.addSubnet(network, prefix, "ipv4");
 }
-for (const [network, prefix] of [["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8], ["64:ff9b::", 96]] as const) {
-  PRIVATE.addSubnet(network, prefix, "ipv6");
+// IPv6 is public only inside 2000::/3, the global addresses. Inside it, 6to4 (2002::/16), Teredo
+// (2001::/32) and the documentation range carry or stand for other addresses, so they are refused too.
+// Everything outside it, such as NAT64, IPv4-compatible and site-local forms, is refused as well.
+const GLOBAL_IPV6 = new BlockList();
+GLOBAL_IPV6.addSubnet("2000::", 3, "ipv6");
+const TUNNELLED_IPV6 = new BlockList();
+for (const [network, prefix] of [["2001::", 32], ["2001:db8::", 32], ["2002::", 16]] as const) {
+  TUNNELLED_IPV6.addSubnet(network, prefix, "ipv6");
 }
 
 // An IPv4 address written as IPv6, such as ::ffff:127.0.0.1 or ::ffff:7f00:1, as plain IPv4.
@@ -44,7 +50,7 @@ export function isPublicAddress(address: string): boolean {
   if (family === 4) return !PRIVATE.check(address, "ipv4");
   const ipv4 = mappedIpv4(new URL(`http://[${address}]`).hostname.slice(1, -1));
   if (ipv4) return isPublicAddress(ipv4);
-  return !PRIVATE.check(address, "ipv6");
+  return GLOBAL_IPV6.check(address, "ipv6") && !TUNNELLED_IPV6.check(address, "ipv6");
 }
 
 // The DNS lookup each connection uses. It fails when any address for the name is not public.
@@ -68,13 +74,18 @@ function checkUrl(raw: string): URL {
   return url;
 }
 
-function getOnce(url: URL): Promise<{ status: number; location: string | null; contentType: string; body: string }> {
+// The whole read, every redirect included, must finish by the deadline. A quiet connection is
+// also dropped after TIMEOUT_MS, so a slow page cannot hold the reader open.
+function getOnce(url: URL, deadline: AbortSignal): Promise<{ status: number; location: string | null; contentType: string; body: string }> {
   const client = url.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
+    if (deadline.aborted) return reject(new ArticleError("The page took too long to answer."));
+    deadline.addEventListener("abort", () => reject(new ArticleError("The page took too long to answer.")), { once: true });
     const request = client.get(
       url,
       {
         lookup: publicLookup,
+        signal: deadline,
         timeout: TIMEOUT_MS,
         headers: { "User-Agent": "agentic-ai-teammates news reader", Accept: "text/html", "Accept-Encoding": "identity" },
       },
@@ -104,8 +115,9 @@ function getOnce(url: URL): Promise<{ status: number; location: string | null; c
 
 async function fetchPage(raw: string): Promise<{ url: string; html: string }> {
   let url = checkUrl(raw);
+  const deadline = AbortSignal.timeout(TIMEOUT_MS);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const page = await getOnce(url);
+    const page = await getOnce(url, deadline);
     if (page.status >= 300 && page.status < 400 && page.location) {
       url = checkUrl(new URL(page.location, url).toString());
       continue;
