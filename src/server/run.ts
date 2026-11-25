@@ -140,16 +140,16 @@ export class Run {
     }
   }
 
-  // What a teammate answers a person from: the conversation so far and its own recent work.
-  async talkContext() {
+  // What a teammate answers a person from: their thread so far and its own recent work.
+  async talkContext(person: string) {
     const { company, teammate } = this.ref;
-    return { conversation: await conversation(this.pool, company, teammate, 20), ...(await recentWork(this.pool, company, teammate)) };
+    return { conversation: await conversation(this.pool, company, teammate, person, 20), ...(await recentWork(this.pool, company, teammate)) };
   }
 
   // The teammate's answer to one message. Answering the same message again changes nothing.
-  async reply(messageId: string, text: string) {
+  async reply(person: string, messageId: string, text: string) {
     const { company, teammate, runId } = this.ref;
-    await say(this.pool, { company, teammate, messageId, role: "teammate", author: teammate, text, runId });
+    await say(this.pool, { company, teammate, person, messageId, role: "teammate", author: teammate, text, runId });
   }
 
   async note(kind: "check" | "note" | "model", title: string, detail: Record<string, unknown> = {}) {

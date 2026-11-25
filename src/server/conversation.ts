@@ -1,8 +1,9 @@
 import type { Pool } from "pg";
 
-// What people and a teammate say to each other in Mission Control. A person's message goes in
+// What a person and a teammate say to each other in Mission Control. A person's message goes in
 // here and into the teammate's inbox at once. The teammate's next run answers it with the same
-// message id, so a message is answered once even when a run is tried again.
+// message id, so a message is answered once even when a run is tried again. Each person sees
+// only their own thread, keyed by their email.
 
 export const MAX_MESSAGE = 2000;
 
@@ -14,23 +15,25 @@ function toLine(row: LineRow): Line {
   return { messageId: row.message_id, role: row.role, author: row.author, text: row.text, runId: row.run_id, at: row.at.toISOString() };
 }
 
-// The last lines with one teammate, oldest first.
-export async function conversation(pool: Pool, company: string, teammate: string, limit = 50): Promise<Line[]> {
+// The last lines between one person and one teammate, oldest first.
+export async function conversation(pool: Pool, company: string, teammate: string, person: string, limit = 50): Promise<Line[]> {
   const { rows } = await pool.query<LineRow>(
     `SELECT message_id, role, author, text, run_id, at FROM (
-       SELECT * FROM conversation WHERE company = $1 AND teammate = $2 ORDER BY at DESC, id DESC LIMIT $3
+       SELECT * FROM conversation WHERE company = $1 AND teammate = $2 AND person = $3 ORDER BY at DESC, id DESC LIMIT $4
      ) last ORDER BY at, id`,
-    [company, teammate, limit],
+    [company, teammate, person, limit],
   );
   return rows.map(toLine);
 }
 
 // Keeps one line. A second write with the same message id and role changes nothing.
-export async function say(pool: Pool, line: { company: string; teammate: string; messageId: string; role: Line["role"]; author: string; text: string; runId?: string }) {
+export type Said = { company: string; teammate: string; person: string; messageId: string; role: Line["role"]; author: string; text: string; runId?: string };
+
+export async function say(pool: Pool, line: Said) {
   await pool.query(
-    `INSERT INTO conversation (company, teammate, message_id, role, author, text, run_id) VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (company, teammate, message_id, role) DO NOTHING`,
-    [line.company, line.teammate, line.messageId, line.role, line.author, line.text, line.runId ?? null],
+    `INSERT INTO conversation (company, teammate, person, message_id, role, author, text, run_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (company, teammate, person, message_id, role) DO NOTHING`,
+    [line.company, line.teammate, line.person, line.messageId, line.role, line.author, line.text, line.runId ?? null],
   );
 }
 

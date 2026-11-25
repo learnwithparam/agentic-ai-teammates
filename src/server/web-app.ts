@@ -64,10 +64,14 @@ export function createWebApp(deps: WebDeps): Express {
 
   const person = (request: express.Request): Person => request.person!;
 
+  function mayTeammate(who: Person, teammate: string, relation: "can_view" | "can_configure") {
+    return check(who, relation, { type: "teammate", id: `${who.company}-${teammate}`, company: who.company });
+  }
+
   async function requireTeammate(who: Person, teammate: string, relation: "can_view" | "can_configure", refusal?: string) {
     const { rows } = await pool.query("SELECT 1 FROM teammates WHERE company = $1 AND id = $2", [who.company, teammate]);
     if (!rows[0]) throw new HttpError(404, "There is no such teammate.");
-    if (!(await check(who, relation, { type: "teammate", id: `${who.company}-${teammate}`, company: who.company }))) {
+    if (!(await mayTeammate(who, teammate, relation))) {
       throw new HttpError(403, refusal ?? (relation === "can_view" ? "You cannot see this teammate." : "Only an admin can change this teammate."));
     }
   }
@@ -219,12 +223,13 @@ export function createWebApp(deps: WebDeps): Express {
     response.json({ text });
   });
 
-  // Anyone who sees a teammate may ask it something. Its answer comes from tools that only read.
+  // Anyone who sees a teammate may ask it something, and sees only their own thread with it.
+  // How far the answer may look is decided here, from OpenFGA, never from the request.
   app.get("/api/teammates/:id/conversation", async (request, response) => {
     const who = person(request);
     const teammate = TeammateId.parse(request.params.id);
     await requireTeammate(who, teammate, "can_view");
-    response.json({ lines: await conversation(pool, who.company, teammate) });
+    response.json({ lines: await conversation(pool, who.company, teammate, who.email) });
   });
 
   app.post("/api/teammates/:id/messages", async (request, response) => {
@@ -232,10 +237,11 @@ export function createWebApp(deps: WebDeps): Express {
     const teammate = TeammateId.parse(request.params.id);
     const { messageId, text } = Message.parse(request.body);
     await requireTeammate(who, teammate, "can_view");
-    await say(pool, { company: who.company, teammate, messageId, role: "person", author: who.name, text });
+    const reach = (await mayTeammate(who, teammate, "can_configure")) ? "tools" : "board";
+    await say(pool, { company: who.company, teammate, person: who.email, messageId, role: "person", author: who.name, text });
     await inbox.receive({
-      company: who.company, teammate, source: "person", sourceId: messageId, type: "person.message",
-      payload: { messageId, text, from: who.name },
+      company: who.company, teammate, source: "person", sourceId: `${who.email}/${messageId}`, type: "person.message",
+      payload: { messageId, text, from: who.name, person: who.email, reach },
     });
     response.status(202).json({ messageId });
   });

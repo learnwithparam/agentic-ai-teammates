@@ -284,15 +284,33 @@ test("an approver's limit travels as the condition on their approver tuple", () 
 
 test("a message to a teammate is stored once and queued once, however often it is sent", async () => {
   signedIn = MEI;
+  refused.add("can_configure");
   const messageId = randomUUID();
   for (let send = 0; send < 2; send++) {
     const response = await call("/api/teammates/invoices/messages", { method: "POST", body: { messageId, text: "  What waits for me?  " } });
     assert.equal(response.status, 202);
   }
-  const events = await pool.query("SELECT type, payload FROM inbox_events WHERE source = 'person' AND source_id = $1", [messageId]);
-  assert.deepEqual(events.rows, [{ type: "person.message", payload: { messageId, text: "What waits for me?", from: MEI.name } }]);
+  refused.clear();
+  const events = await pool.query("SELECT type, payload FROM inbox_events WHERE source = 'person' AND source_id = $1", [`${MEI.email}/${messageId}`]);
+  // Mei only views the teammate, so its answer may use only what the board already shows her.
+  const payload = { messageId, text: "What waits for me?", from: MEI.name, person: MEI.email, reach: "board" };
+  assert.deepEqual(events.rows, [{ type: "person.message", payload }]);
   const { lines } = (await (await call("/api/teammates/invoices/conversation")).json()) as { lines: { role: string; text: string; author: string }[] };
   assert.deepEqual(lines.map(({ role, text, author }) => ({ role, text, author })), [{ role: "person", text: "What waits for me?", author: MEI.name }]);
+});
+
+test("only someone who may configure a teammate lets it read the books and mail for an answer", async () => {
+  signedIn = ADA;
+  const messageId = randomUUID();
+  await call("/api/teammates/invoices/messages", { method: "POST", body: { messageId, text: "What are Lumen's bank details?" } });
+  const { rows } = await pool.query("SELECT payload->>'reach' AS reach FROM inbox_events WHERE source_id = $1", [`${ADA.email}/${messageId}`]);
+  assert.deepEqual(rows, [{ reach: "tools" }]);
+});
+
+test("each person sees only their own thread with a teammate", async () => {
+  signedIn = RAVI;
+  const { lines } = (await (await call("/api/teammates/invoices/conversation")).json()) as { lines: unknown[] };
+  assert.deepEqual(lines, []);
 });
 
 test("someone who cannot see a teammate can neither write to it nor read its conversation", async () => {
