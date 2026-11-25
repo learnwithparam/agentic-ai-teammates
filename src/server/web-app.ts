@@ -12,6 +12,7 @@ import type { Check } from "./permissions";
 import { rules, setRule } from "./policy";
 import { spendByDay } from "./spend";
 import { isToolName, TOOLS } from "./tools";
+import { INSTRUCTIONS, MAX_INSTRUCTIONS, type Memory } from "./memory";
 
 // Mission Control's web process: the signed webhook handlers, and the API behind the board.
 // Every API route needs a signed-in person; only /healthz and /hooks/* do not, and the hooks
@@ -22,6 +23,7 @@ export type WebDeps = {
   check: Check;
   auth: { router: Router; requirePerson: RequestHandler };
   hookSecrets: { lmail: string; ldrive: string };
+  memory: Memory;
 };
 
 const TeammateId = z.string().min(1).max(100);
@@ -30,6 +32,7 @@ const Decide = z.object({
   allowAlways: z.boolean().default(false),
   note: z.string().max(500).nullable().default(null),
 });
+const Instructions = z.object({ text: z.string().max(MAX_INSTRUCTIONS) });
 const Release = z.object({ send: z.boolean() });
 const TeammateSettings = z
   .object({
@@ -188,6 +191,27 @@ export function createWebApp(deps: WebDeps): Express {
     ]);
     const row = rows[0];
     response.json({ id: row.id, paused: row.paused, quiet: row.quiet, autoPostLimit: Number(row.auto_post_limit), dailyBudgetUsd: Number(row.daily_budget_usd) });
+  });
+
+  // A teammate's instructions live in its memory and are read whenever a person will decide.
+  // Anyone who sees the teammate can read them; only an admin can change them.
+  app.get("/api/teammates/:id/instructions", async (request, response) => {
+    const who = person(request);
+    const teammate = TeammateId.parse(request.params.id);
+    await requireTeammate(who, teammate, "can_view");
+    response.json({ text: (await deps.memory.read({ company: who.company, teammate }, INSTRUCTIONS)) ?? "" });
+  });
+
+  app.put("/api/teammates/:id/instructions", async (request, response) => {
+    const who = person(request);
+    const teammate = TeammateId.parse(request.params.id);
+    const { text } = Instructions.parse(request.body);
+    await requireTeammate(who, teammate, "can_configure");
+    await deps.memory.setInstructions({ company: who.company, teammate }, text);
+    await pool.query("INSERT INTO audit_log (company, actor, action, subject, detail) VALUES ($1, $2, 'instructions.changed', $3, $4)", [
+      who.company, who.email, teammate, JSON.stringify({ text }),
+    ]);
+    response.json({ text });
   });
 
   app.get("/api/rules", async (request, response) => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Invoice } from "./checks";
+import { INSTRUCTIONS, NOTE_PATH } from "./memory";
 
 // Every tool a teammate can ask the gateway for. The teammate sends a name and arguments; the
 // gateway checks the arguments, applies the policy, and runs the tool with its own keys.
@@ -116,6 +117,19 @@ export const TOOLS = {
       day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       cards: z.array(Card).min(1).max(10),
     }),
+    decision: "allow",
+    readOnly: false,
+  },
+  "memory.read": {
+    description: "Read one file of this teammate's memory: instructions.md, or a note such as notes/vendor-lumen-print-house.md.",
+    args: z.object({ path: z.union([z.literal(INSTRUCTIONS), z.string().regex(NOTE_PATH)]) }),
+    decision: "allow",
+    readOnly: true,
+  },
+  "memory.record_decision": {
+    description: "Write a person's decision on an invoice into the vendor's note.",
+    // The gateway writes the line from the approval itself, so a teammate cannot put words in memory.
+    args: z.object({ approvalId: z.uuid() }),
     decision: "allow",
     readOnly: false,
   },

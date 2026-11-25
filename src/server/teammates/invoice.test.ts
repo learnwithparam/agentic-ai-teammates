@@ -30,10 +30,17 @@ const INVOICE = {
   currency: "EUR", iban: null, poNumber: null, lines: [{ description: "Design work", quantity: 1, unitPrice: 900, amount: 900 }], tax: 0, total: 900,
 };
 
+// Memory writes are idempotent, so the scripted gateways count them apart from the posts.
+const RECORDED = { status: "done", result: { note: "notes/vendor-kestrel-freelance.md", added: true } };
+
 // The gateway answers the post from a script: the first post dies like a killed process.
-function postingGateway(posts: string[]): GatewayClient {
+function postingGateway(posts: string[], recorded: unknown[]): GatewayClient {
   const gateway = {
-    async tool(_ref: unknown, tool: string, _args: unknown, approvalId?: string) {
+    async tool(_ref: unknown, tool: string, args: unknown, approvalId?: string) {
+      if (tool === "memory.record_decision") {
+        recorded.push(args);
+        return RECORDED;
+      }
       posts.push(`${tool}:${approvalId}`);
       if (posts.length === 1) throw new Error("The worker stopped mid-post.");
       return { status: "done", result: { posted: true, billId: "bill-1" } };
@@ -86,8 +93,9 @@ test("an approved bill whose post died part way posts on the retry and the threa
   assert.deepEqual((await setup.getState(config)).next, ["wait"]);
 
   const posts: string[] = [];
+  const recorded: unknown[] = [];
   const work = invoiceTeammate(checkpointer);
-  const gateway = postingGateway(posts);
+  const gateway = postingGateway(posts, recorded);
 
   const first = await Run.start(pool, gateway, { runId: randomUUID(), company: "bramble", teammate: "invoices" }, RUN_CAPS);
   await assert.rejects(work(first, [decided()]), /stopped mid-post/);
@@ -97,6 +105,8 @@ test("an approved bill whose post died part way posts on the retry and the threa
   await work(retry, [decided()]);
   assert.equal(await retry.finish(), "sent");
   assert.deepEqual(posts, [`books.post_bill:${APPROVAL}`, `books.post_bill:${APPROVAL}`]);
+  // The decision is recorded on each try. The gateway keeps one line, so the note holds it once.
+  assert.deepEqual(recorded, [{ approvalId: APPROVAL }, { approvalId: APPROVAL }]);
   assert.deepEqual((await setup.getState(config)).next, []);
 });
 
@@ -105,7 +115,8 @@ test("a bill QuirkBooks refuses after approval goes to a person once, and is not
   const { setup, config } = await waitingThread(checkpointer, REFUSED_THREAD, REFUSED_APPROVAL);
   let posts = 0;
   const gateway = {
-    async tool() {
+    async tool(_ref: unknown, tool: string) {
+      if (tool === "memory.record_decision") return RECORDED;
       posts += 1;
       throw new GatewayError(422, "QuirkBooks answered 422: The lines and tax do not add up to the total.", false);
     },

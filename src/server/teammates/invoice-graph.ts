@@ -3,6 +3,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { z } from "zod";
 import { type BookFacts, checkInvoice, Invoice, PO_TOLERANCE, type PurchaseOrder, REASONS, type Reason, type Vendor } from "../checks";
 import { GatewayError } from "../gateway-client";
+import { INSTRUCTIONS, notePath, vendorTopic } from "../memory";
 import { modelSchema } from "../model-schema";
 import { COMPANIES } from "../people";
 import type { Run, StopReason } from "../run";
@@ -13,10 +14,13 @@ import type { InvoiceSource } from "../tools";
 // checkpointed in Postgres, so an approval days later resumes exactly where it stopped.
 //
 //   fetch -> screen -> extract -> lookup -> checks -> post -> notify
-//                                              \-> investigate -> brief -> post -> wait -> post_approved -> notify
+//   checks failed: recall -> investigate -> brief -> post -> wait
+//   a person decided: post_approved -> notify
 
 export type Result = { outcome: StopReason; note: string };
 export type Decision = { status: "approved" | "denied"; approvalId: string };
+// What memory holds for this invoice: a person's instructions, and earlier decisions on this vendor.
+type Recalled = { instructions: string | null; pastDecisions: string | null };
 
 const State = Annotation.Root({
   source: Annotation<InvoiceSource>,
@@ -26,6 +30,7 @@ const State = Annotation.Root({
   invoice: Annotation<Invoice | null>,
   facts: Annotation<BookFacts | null>,
   reasons: Annotation<Reason[]>,
+  recalled: Annotation<Recalled | null>,
   findings: Annotation<string | null>,
   brief: Annotation<string | null>,
   approvalId: Annotation<string | null>,
@@ -180,14 +185,28 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
     return { reasons };
   }
 
+  // Memory is read only when a person will decide. A clean invoice needs nothing from it.
+  async function recall(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
+    const run = runOf(config);
+    const read = async (path: string) => done(await run.tool(threadOf(config), "memory.read", { path }), MemoryText).text;
+    const recalled = { instructions: await read(INSTRUCTIONS), pastDecisions: await read(notePath(vendorTopic(state.invoice!.vendorName))) };
+    if (recalled.pastDecisions) await run.note("note", "A person decided on this vendor before", {});
+    return { recalled };
+  }
+
   async function investigate(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
     const run = runOf(config);
-    const facts = { invoice: state.invoice, failedChecks: state.reasons.map((reason) => ({ reason, meaning: REASONS[reason] })), quirkbooks: state.facts };
+    const facts = {
+      invoice: state.invoice,
+      failedChecks: state.reasons.map((reason) => ({ reason, meaning: REASONS[reason] })),
+      quirkbooks: state.facts,
+      pastDecisions: state.recalled?.pastDecisions ?? null,
+    };
     const answer = await run.toolLoop({
       threadId: threadOf(config),
       task: "investigate",
       risk: "high",
-      messages: [{ role: "system", content: INVESTIGATE_RULES }, { role: "user", content: JSON.stringify(facts, null, 2) }],
+      messages: [{ role: "system", content: withInstructions(INVESTIGATE_RULES, state) }, { role: "user", content: JSON.stringify(facts, null, 2) }],
       tools: ["books.find_vendor", "books.purchase_order", "books.vendor_bills", "mail.message"],
       maxTokens: 1500,
     });
@@ -196,9 +215,18 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
 
   async function brief(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
     const run = runOf(config);
-    const facts = { invoice: state.invoice, failedChecks: state.reasons.map((reason) => REASONS[reason]), findings: state.findings };
+    const facts = {
+      invoice: state.invoice,
+      failedChecks: state.reasons.map((reason) => REASONS[reason]),
+      findings: state.findings,
+      pastDecisions: state.recalled?.pastDecisions ?? null,
+    };
+    const messages = [
+      { role: "system" as const, content: withInstructions(BRIEF_RULES, state) },
+      { role: "user" as const, content: JSON.stringify(facts, null, 2) },
+    ];
     const answer = await run.structured(
-      { task: "brief", risk: "high", messages: [{ role: "system", content: BRIEF_RULES }, { role: "user", content: JSON.stringify(facts, null, 2) }], maxTokens: 800 },
+      { task: "brief", risk: "high", messages, maxTokens: 800 },
       Brief.format,
       Brief.parse,
     );
@@ -222,6 +250,8 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
 
   async function postApproved(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
     const run = runOf(config);
+    // The decision goes into the vendor's note first. Writing it twice changes nothing, so a retry is safe.
+    await run.tool(threadOf(config), "memory.record_decision", { approvalId: state.approvalId! });
     if (state.decision!.status === "denied") return { result: { outcome: "nothing_to_send", note: `${label(state)} was denied by a person.` } };
     const result = await postOrRefusal(() =>
       run.tool(threadOf(config), "books.post_bill", { invoice: state.invoice!, source: state.source, brief: state.brief }, state.approvalId!),
@@ -251,6 +281,7 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
     .addNode("extract", extract)
     .addNode("lookup", lookup)
     .addNode("checks", checks)
+    .addNode("recall", recall)
     .addNode("investigate", investigate)
     .addNode("write_brief", brief)
     .addNode("post", post)
@@ -262,7 +293,8 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
     .addConditionalEdges("screen", (state) => (state.result ? END : "extract"), ["extract", END])
     .addConditionalEdges("extract", (state) => (state.result ? END : "lookup"), ["lookup", END])
     .addEdge("lookup", "checks")
-    .addConditionalEdges("checks", (state) => (state.reasons.length ? "investigate" : "post"), ["investigate", "post"])
+    .addConditionalEdges("checks", (state) => (state.reasons.length ? "recall" : "post"), ["recall", "post"])
+    .addEdge("recall", "investigate")
     .addEdge("investigate", "write_brief")
     .addEdge("write_brief", "post")
     .addConditionalEdges("post", (state) => (state.approvalId && !state.result ? "wait" : "notify"), ["wait", "notify"])
@@ -299,6 +331,15 @@ function postResult(state: State, result: Awaited<ReturnType<Run["tool"]>>): Par
 function done<T>(result: Awaited<ReturnType<Run["tool"]>>, schema: z.ZodType<T>): T {
   if (result.status !== "done") throw new Error(`A reading tool did not run: ${result.status}.`);
   return schema.parse(result.result);
+}
+
+const MemoryText = z.object({ text: z.string().nullable() });
+
+// A person's instructions sit with the rules, because a person in the company wrote them. Past
+// decisions go with the facts instead: they quote invoice numbers a vendor chose.
+function withInstructions(rules: string, state: State): string {
+  const instructions = state.recalled?.instructions?.trim();
+  return instructions ? `${rules}\n\nThe company's instructions for this teammate:\n${instructions}` : rules;
 }
 
 function label(state: State): string {

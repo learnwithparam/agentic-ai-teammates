@@ -4,6 +4,8 @@ import { createPool, migrate } from "./db";
 import { requireSettings, setting } from "./env";
 import { recordMember } from "./members";
 import { openFgaCheck } from "./permissions";
+import { Memory } from "./memory";
+import { createS3 } from "./s3";
 import { createWebApp } from "./web-app";
 
 // Mission Control's web process. Start it with npm run web. It serves the board, its API and
@@ -12,6 +14,7 @@ import { createWebApp } from "./web-app";
 requireSettings([
   "APP_URL", "PORT", "DATABASE_URL", "OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_AUDIENCE",
   "FGA_API_URL", "FGA_API_TOKEN", "FGA_STORE_ID", "FGA_MODEL_ID", "LMAIL_WEBHOOK_SECRET", "LDRIVE_WEBHOOK_SECRET",
+  "S3_ENDPOINT", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY",
 ]);
 
 const pool = createPool(setting("DATABASE_URL"));
@@ -29,8 +32,11 @@ const auth = await createAuth({
   onSignIn: (person) => recordMember(pool, person),
 });
 
+const memory = new Memory(createS3());
+await memory.ready();
 const app = createWebApp({
   pool,
+  memory,
   auth,
   check: openFgaCheck({
     apiUrl: setting("FGA_API_URL"),

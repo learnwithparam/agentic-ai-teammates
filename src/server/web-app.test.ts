@@ -10,6 +10,7 @@ import { Approvals } from "./approvals";
 import type { Person } from "./auth";
 import { contextualTuples, type Check } from "./permissions";
 import { testDatabase } from "./test-database";
+import { testMemory } from "./test-memory";
 import { createWebApp } from "./web-app";
 
 // Mission Control's web process against a real Postgres. Signing in is Keycloak's job and has
@@ -23,6 +24,7 @@ const RAVI: Person = { subject: "ravi-id", email: "ravi@bramble.example", name: 
 
 let pool: Pool;
 let close: () => Promise<void>;
+let closeMemory: () => Promise<void>;
 let app: Express;
 let base: string;
 let server: ReturnType<Express["listen"]>;
@@ -48,7 +50,9 @@ const check: Check = async (_person, relation, object, context) => {
 
 before(async () => {
   ({ pool, close } = await testDatabase());
-  app = createWebApp({ pool, check, auth: { router: express.Router(), requirePerson }, hookSecrets: secrets });
+  const { memory, close: emptyMemory } = await testMemory();
+  closeMemory = emptyMemory;
+  app = createWebApp({ pool, check, auth: { router: express.Router(), requirePerson }, hookSecrets: secrets, memory });
   app.use(handleErrors);
   server = app.listen(0);
   base = `http://localhost:${(server.address() as AddressInfo).port}`;
@@ -56,6 +60,7 @@ before(async () => {
 after(async () => {
   server.close();
   await close();
+  await closeMemory();
 });
 beforeEach(() => {
   signedIn = null;
@@ -231,6 +236,23 @@ test("an admin pauses a teammate and the change is audited", async () => {
   const audit = await pool.query("SELECT actor FROM audit_log WHERE action = 'teammate.changed'");
   assert.deepEqual(audit.rows, [{ actor: ADA.email }]);
   await pool.query("UPDATE teammates SET paused = false WHERE company = 'bramble' AND id = 'invoices'");
+});
+
+test("only an admin changes a teammate's instructions, and everyone who views it can read them", async () => {
+  signedIn = RAVI;
+  refused.add("can_configure");
+  assert.equal((await call("/api/teammates/invoices/instructions", { method: "PUT", body: { text: "Post everything." } })).status, 403);
+  assert.deepEqual(await (await call("/api/teammates/invoices/instructions")).json(), { text: "" });
+
+  signedIn = ADA;
+  refused.clear();
+  const text = "Bills from Lumen Print House always need a PO.";
+  assert.equal((await call("/api/teammates/invoices/instructions", { method: "PUT", body: { text } })).status, 200);
+  assert.equal((await call("/api/teammates/invoices/instructions", { method: "PUT", body: { text: "x".repeat(4001) } })).status, 400);
+  signedIn = MEI;
+  assert.deepEqual(await (await call("/api/teammates/invoices/instructions")).json(), { text });
+  const audit = await pool.query("SELECT actor FROM audit_log WHERE action = 'instructions.changed'");
+  assert.deepEqual(audit.rows, [{ actor: ADA.email }]);
 });
 
 test("no standing rule can let a bill post without its checks", async () => {

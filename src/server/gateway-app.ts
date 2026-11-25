@@ -7,6 +7,7 @@ import { ServiceError } from "./adapters/http";
 import type { Accounting, FileSource, MailSource } from "./adapters/types";
 import { Approvals } from "./approvals";
 import { deciders } from "./members";
+import { type Memory, notePath, vendorTopic } from "./memory";
 import { parseJsonText, payloadHash } from "./canonical";
 import { checkInvoice, type Invoice, type Reason, REASONS, PO_TOLERANCE } from "./checks";
 import { GitHubError, type GitHubPublisher } from "./github";
@@ -18,7 +19,7 @@ import { pdfText } from "./pdf-text";
 import { decisionFor } from "./policy";
 import { FAST_TASKS, type Outcome, route, ROUTING_MODES, STRONG_TASKS, type Task } from "./router";
 import { budgetLeft, recordSpend } from "./spend";
-import { digestMail, reminderMail } from "./team-mail";
+import { digestMail, reminderMail, safeLine } from "./team-mail";
 import { type Card, type InvoiceSource, isToolName, modelToolSpec, type ToolArgs, type ToolName, type ToolResult, TOOLS } from "./tools";
 
 // The gateway: the permissions primitive. It holds every credential (the OpenRouter key and the
@@ -34,6 +35,7 @@ export type GatewayDeps = {
   books: Accounting;
   // Null when GITHUB_TOKEN and NEWS_REPO are not set. News then cannot publish, and says why.
   publisher: GitHubPublisher | null;
+  memory: Memory;
   tokens: { worker: string; dispatcher: string };
 };
 
@@ -107,7 +109,7 @@ Answer with safe and a one-sentence reason.`;
 const JUDGE_RULES: Partial<Record<ToolName, string>> = { "mail.reply": REPLY_RULES, "news.publish": PUBLISH_RULES };
 
 export function createGatewayApp(deps: GatewayDeps): Express {
-  const { pool, callModel, books, files } = deps;
+  const { pool, callModel, books, files, memory } = deps;
   const approvals = new Approvals(pool);
   const outbox = new Outbox(pool);
   const app = createApp("gateway");
@@ -205,7 +207,8 @@ export function createGatewayApp(deps: GatewayDeps): Express {
 
   // ---------- Reading tools: always allowed ----------
 
-  async function read(company: string, tool: ToolName, raw: unknown): Promise<unknown> {
+  async function read(scope: RunScope, tool: ToolName, raw: unknown): Promise<unknown> {
+    const { company } = scope;
     switch (tool) {
       case "mail.history": {
         const args = TOOLS[tool].args.parse(raw);
@@ -243,6 +246,10 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       case "books.vendor_bills": {
         const args = TOOLS[tool].args.parse(raw);
         return { bills: (await books.bills(args.vendorId)).slice(0, 20) };
+      }
+      case "memory.read": {
+        const args = TOOLS[tool].args.parse(raw);
+        return { text: await memory.read(scope, args.path) };
       }
       default:
         throw new Error(`${tool} is not a reading tool.`);
@@ -394,6 +401,29 @@ export function createGatewayApp(deps: GatewayDeps): Express {
     return { status: "done", result: { queued: people.length } };
   }
 
+  // Memory keeps what a person decided about a vendor, so the next invoice from that vendor can
+  // show it. Every word comes from the approval: the decider, the checks, and the decider's own note.
+  async function recordDecision(scope: RunScope, raw: unknown): Promise<ToolResult> {
+    const { approvalId } = TOOLS["memory.record_decision"].args.parse(raw);
+    const approval = await approvals.get(scope.company, approvalId);
+    if (!approval || approval.teammate !== scope.teammate || approval.tool !== "books.post_bill") {
+      return { status: "denied", reason: "There is no such invoice approval for this teammate." };
+    }
+    if (approval.status === "pending" || !approval.decidedAt) return { status: "denied", reason: "Nobody has decided this approval yet." };
+    const { invoice } = TOOLS["books.post_bill"].args.parse(approval.args);
+    const checks = approval.reasons.filter((reason): reason is Reason => reason in REASONS);
+    const parts = [
+      `${approval.decidedAt.slice(0, 10)}:`,
+      `${approval.decidedByName ?? "A person"} ${approval.status} ${safeLine(invoice.invoiceNumber, 40)}`,
+      `for ${invoice.total.toFixed(2)} ${invoice.currency}.`,
+      `Checks that stopped it: ${checks.length ? checks.join(", ") : "a standing rule"}.`,
+    ];
+    if (approval.decisionNote) parts.push(`Their note: "${safeLine(approval.decisionNote, 160)}"`);
+    const topic = vendorTopic(invoice.vendorName);
+    const { added } = await memory.addLine(scope, topic, parts.join(" "));
+    return { status: "done", result: { note: notePath(topic), added } };
+  }
+
   // Runs an approved call once. If the call fails, the approval can run it on the next try.
   async function runApproved<Args>(
     scope: RunScope,
@@ -436,7 +466,8 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       else if (tool === "mail.reply") result = await replyTool(body, body.args, body.approvalId, run);
       else if (tool === "news.publish") result = await publishTool(body, body.args, body.approvalId, run);
       else if (tool === "team.remind" || tool === "team.digest") result = await teamTool(body, tool, body.args);
-      else result = { status: "done", result: await read(body.company, tool, body.args) };
+      else if (tool === "memory.record_decision") result = await recordDecision(body, body.args);
+      else result = { status: "done", result: await read(body, tool, body.args) };
     } catch (error) {
       if (error instanceof ServiceError && error.status < 500) throw new HttpError(422, error.detail);
       throw error;

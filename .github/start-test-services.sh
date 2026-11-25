@@ -11,4 +11,7 @@ for name in POSTGRES_PASSWORD KEYCLOAK_DB_PASSWORD OPENFGA_DB_PASSWORD TEAMMATES
 done
 teammates="$(grep '^TEAMMATES_DB_PASSWORD=' "$settings" | cut -d= -f2)"
 echo "TEST_DATABASE_URL=postgresql://teammates:$teammates@localhost:5452/teammates_test" >> "$settings"
+# The memory tests write to their own bucket in this MinIO.
+echo "S3_ENDPOINT=http://localhost:9100" >> "$settings"
+echo "S3_REGION=us-east-1" >> "$settings"
 docker compose --env-file "$settings" -f infra/docker-compose.yml up -d --wait postgres openfga minio

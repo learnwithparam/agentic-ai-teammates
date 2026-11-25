@@ -7,7 +7,9 @@ import { optionalSetting, requireSettings, setting } from "./env";
 import { createGatewayApp } from "./gateway-app";
 import { GitHubPublisher } from "./github";
 import { createModelClient } from "./llm";
+import { Memory } from "./memory";
 import { COMPANIES } from "./people";
+import { createS3 } from "./s3";
 import { renewWatches } from "./subscriptions";
 import { startTracing } from "./tracing";
 
@@ -18,6 +20,7 @@ requireSettings([
   "DATABASE_URL", "OPENROUTER_API_KEY", "GATEWAY_PORT", "GATEWAY_WORKER_TOKEN", "GATEWAY_DISPATCHER_TOKEN",
   "LMAIL_URL", "LMAIL_API_KEY", "LDRIVE_URL", "LDRIVE_API_KEY", "QUIRKBOOKS_URL", "QUIRKBOOKS_API_KEY",
   "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL", "HOOKS_URL",
+  "S3_ENDPOINT", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY",
 ]);
 
 const stopTracing = startTracing("gateway");
@@ -34,6 +37,8 @@ const mail = (company: string) => {
   if (!mailbox) throw new Error(`No mailbox for ${company}.`);
   return mailbox;
 };
+const memory = new Memory(createS3());
+await memory.ready();
 const files = new LDrive(setting("LDRIVE_URL"), setting("LDRIVE_API_KEY"));
 
 const app = createGatewayApp({
@@ -43,6 +48,7 @@ const app = createGatewayApp({
   files,
   books: new QuirkBooks(setting("QUIRKBOOKS_URL"), setting("QUIRKBOOKS_API_KEY")),
   publisher: githubToken && newsRepo ? new GitHubPublisher(githubToken, newsRepo) : null,
+  memory,
   tokens: { worker: setting("GATEWAY_WORKER_TOKEN"), dispatcher: setting("GATEWAY_DISPATCHER_TOKEN") },
 });
 
