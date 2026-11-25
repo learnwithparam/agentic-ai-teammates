@@ -159,3 +159,17 @@ test("a new event wakes a listening worker", async () => {
   assert.equal(await woken, `bramble/${teammate}`);
   await stop();
 });
+
+test("an event that succeeds on a retry no longer shows the earlier error", async () => {
+  const inbox = new Inbox(pool, { ...INBOX_SETTINGS, retrySeconds: 0 });
+  const teammate = await newTeammate();
+  await inbox.receive(mail(teammate, "history-retry"));
+  const firstRun = randomUUID();
+  await inbox.claim("bramble", teammate, firstRun);
+  await inbox.fail(firstRun, "LMail did not answer");
+  const secondRun = randomUUID();
+  await inbox.claim("bramble", teammate, secondRun);
+  assert.equal(await inbox.complete(secondRun), true);
+  const { rows } = await pool.query("SELECT status, error FROM inbox_events WHERE teammate = $1", [teammate]);
+  assert.deepEqual(rows, [{ status: "done", error: null }]);
+});

@@ -2,7 +2,7 @@ import type { Pool } from "pg";
 import { parseJsonText } from "./canonical";
 import type { GatewayClient, ModelAsk, RoutedAnswer, RunRef } from "./gateway-client";
 import type { ChatMessage } from "./llm";
-import type { Risk, Task } from "./router";
+import type { Risk, RoutingMode, Task } from "./router";
 import { type ToolName, type ToolResult, toolFromModelName } from "./tools";
 
 // One run: a teammate working one batch of inbox events. It carries the run's limits and ends
@@ -30,6 +30,10 @@ const PRIORITY: StopReason[] = ["failed", "handed_to_human", "deferred", "sent",
 export class Run {
   tokens = 0;
   costUsd = 0;
+  // Answers that did not match their schema. The eval counts them per routing mode.
+  schemaFailures = 0;
+  // Which tiers may answer. Only the eval sets anything but routed.
+  mode: RoutingMode = "routed";
   private readonly outcomes = new Map<string, { reason: StopReason; note: string }>();
   private readonly cursors = new Map<string, string>();
   private keepCursors = true;
@@ -60,7 +64,7 @@ export class Run {
 
   async model(ask: ModelAsk): Promise<RoutedAnswer> {
     this.checkCaps();
-    const answer = await this.gateway.model(this.ref, ask);
+    const answer = await this.gateway.model(this.ref, { ...ask, mode: this.mode });
     if (answer.tier) {
       this.tokens += answer.answer.inputTokens + answer.answer.outputTokens;
       this.costUsd += answer.answer.costUsd;
@@ -78,6 +82,7 @@ export class Run {
       const value = parse(parseJsonText(answer.answer.content));
       if (value !== null) return { value };
       prior.push({ tier: answer.tier, result: "schema_failure" });
+      this.schemaFailures += 1;
       await this.note("model", `The answer to ${ask.task} did not match its schema`, { tier: answer.tier });
     }
   }

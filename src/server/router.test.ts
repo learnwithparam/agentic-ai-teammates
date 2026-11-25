@@ -9,6 +9,11 @@ test("every quick task goes to fast, every heavy task to strong", () => {
   for (const task of STRONG_TASKS) assert.equal(route(task, "low", plenty).tier, "strong", task);
 });
 
+test("screening for instructions aimed at the teammate always gets the deeper look", () => {
+  assert.equal(route("screen", "high", plenty).tier, "strong");
+  assert.equal(route("screen", "low", plenty).tier, "strong");
+});
+
 test("a schema failure or an error on fast goes to strong", () => {
   assert.equal(route("extract", "low", plenty, [{ tier: "fast", result: "schema_failure" }]).tier, "strong");
   assert.equal(route("extract", "low", plenty, [{ tier: "fast", result: "error" }]).tier, "strong");
@@ -28,7 +33,7 @@ test("a failure on strong goes to a person", () => {
 test("a budget too small for strong goes to a person, but quick work still runs", () => {
   const short = STRONG_CALL_ESTIMATE_USD / 2;
   assert.equal(route("select", "low", short).tier, null);
-  assert.equal(route("screen", "low", short).tier, "fast");
+  assert.equal(route("extract", "low", short).tier, "fast");
   assert.equal(route("select", "low", STRONG_CALL_ESTIMATE_USD).tier, "strong");
 });
 

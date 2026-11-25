@@ -15,6 +15,7 @@
     "web": "tsx src/server/web.ts",
     "invoices:make": "tsx data/invoices/make.ts",
     "invoices:send": "tsx data/invoices/send.ts",
+    "invoices:run": "tsx data/invoices/run.ts",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' 'apps/**/*.test.ts' 'data/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md docs/coverage.md && tsx scripts/check-repo.ts"
   },

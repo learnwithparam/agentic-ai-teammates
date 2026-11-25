@@ -151,7 +151,7 @@ export class Inbox {
   // Marks the run's events done. False means the run no longer held them.
   async complete(runId: string): Promise<boolean> {
     const { rowCount } = await this.pool.query(
-      "UPDATE inbox_events SET status = 'done', finished_at = now(), lease_until = NULL WHERE run_id = $1 AND status = 'claimed'",
+      "UPDATE inbox_events SET status = 'done', finished_at = now(), lease_until = NULL, error = NULL WHERE run_id = $1 AND status = 'claimed'",
       [runId],
     );
     return (rowCount ?? 0) > 0;

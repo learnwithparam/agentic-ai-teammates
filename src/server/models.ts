@@ -1,8 +1,8 @@
 // The two model tiers every teammate uses, and the only place their ids and prices are written.
 // scripts/check-models.ts compares this file with OpenRouter's live model list on every check.
 //
-// fast   reads and sorts: screen an event, classify a tool call, extract an invoice, summarise.
-// strong thinks harder: investigate a failed invoice, write the approval brief, select the news.
+// fast   reads and sorts: classify a tool call, extract an invoice, summarise.
+// strong thinks harder: screen an event, investigate a failed invoice, write the approval brief, select the news.
 //
 // The router (router.ts) picks a tier for each call. A person is the step after strong.
 

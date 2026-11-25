@@ -95,6 +95,17 @@ With no case named, it sends them all. Mail cases go by SMTP to ap@bramble.examp
 
 After changing `data/invoices/cases.ts`, write the files again with `npm run invoices:make`.
 
+## Score the teammate
+
+```bash
+npm run invoices:run
+npm run invoices:run -- --routing all
+```
+
+This screens and reads every case with real model calls, then runs the checks against QuirkBooks's starting books. Nothing is posted, and the gateway must be running.
+
+The table counts the right cases and the wrong postings. It also shows the cost per 100 invoices. The run fails if any invoice would post that should wait. With `--routing all` it also scores each model alone.
+
 ## Check your work
 
 ```bash

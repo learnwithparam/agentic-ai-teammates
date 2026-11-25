@@ -64,10 +64,10 @@ export function createModelClient(apiKey: string) {
   };
 }
 
-// The fast tier thinks briefly before answering; long thinking costs more than the task is worth.
-// The strong tier never gets a temperature: it does not accept one.
-function openRouterOptions(tier: Tier) {
-  const reasoning = tier === "fast" ? { effort: "low" } : { effort: "medium" };
+// The fast tier does not think. Given any effort, even low, it thought until max_tokens and sent cut-off
+// JSON, so every quick check failed. The strong tier never gets a temperature: it does not accept one.
+export function openRouterOptions(tier: Tier) {
+  const reasoning = tier === "fast" ? { enabled: false } : { effort: "medium" };
   return { provider: { require_parameters: true }, usage: { include: true }, reasoning } as Record<string, unknown>;
 }
 
