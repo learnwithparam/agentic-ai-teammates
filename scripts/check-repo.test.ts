@@ -33,3 +33,9 @@ test("a script nothing calls fails", () => {
   const problems = problemsFor({ "scripts/orphan.ts": "console.log(1);" });
   assert.match(problems.join("\n"), /scripts\/orphan\.ts: nothing in use/);
 });
+
+test("a compose file without its own project name fails", () => {
+  const unnamed = problemsFor({ "langfuse/docker-compose.yml": "services:\n  web:\n    image: langfuse/langfuse:3\n" });
+  assert.match(unnamed.join("\n"), /langfuse\/docker-compose\.yml: has no "name: teammates-/);
+  assert.deepEqual(problemsFor({ "langfuse/docker-compose.yml": "name: teammates-langfuse\nservices:\n  web:\n    image: langfuse/langfuse:3\n" }), []);
+});

@@ -137,9 +137,21 @@ function productionProblems(files: Map<string, string>, bodies: Map<string, stri
   return problems;
 }
 
+// Docker Compose names a project after its folder when the file has no name. Two folders called
+// langfuse then share one project, and starting one replaces the other's containers.
+function composeProblems(files: Map<string, string>): string[] {
+  const problems: string[] = [];
+  for (const [path, body] of files) {
+    if (!/(^|\/)docker-compose\.ya?ml$/.test(path)) continue;
+    if (!/^name: teammates-[a-z-]+$/m.test(body)) problems.push(`${path}: has no "name: teammates-..." line, so it shares a project with any folder of the same name.`);
+  }
+  return problems;
+}
+
 export function findProblems(files: Map<string, string>, tracked: string[]): string[] {
   const bodies = new Map([...files].map(([path, body]) => [path, stripComments(path, body)]));
-  return [...unusedFiles(files, bodies, tracked), ...missingPaths(bodies, tracked), ...manifestProblems(files), ...productionProblems(files, bodies)];
+  const fileProblems = [...unusedFiles(files, bodies, tracked), ...missingPaths(bodies, tracked)];
+  return [...fileProblems, ...manifestProblems(files), ...productionProblems(files, bodies), ...composeProblems(files)];
 }
 
 function main() {
@@ -152,7 +164,7 @@ function main() {
     console.error(problems.join("\n"));
     process.exit(1);
   }
-  console.log("check-repo: every watched file and npm script is in use, every named path exists, every dependency is pinned, app code has no stand-ins and reads settings in one place");
+  console.log("check-repo: every watched file and npm script is in use, every named path exists, every dependency is pinned, app code has no stand-ins and reads settings in one place, every compose file has its own project name");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

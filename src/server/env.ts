@@ -29,9 +29,9 @@ const SETTINGS = {
   S3_REGION: "The S3 region. Use auto for R2 and us-east-1 for MinIO.",
   S3_ACCESS_KEY_ID: "The S3 access key. npm run setup writes MinIO's.",
   S3_SECRET_ACCESS_KEY: "The S3 secret key. npm run setup writes MinIO's.",
-  LANGFUSE_PUBLIC_KEY: "Your Langfuse project's public key.",
-  LANGFUSE_SECRET_KEY: "Your Langfuse project's secret key.",
-  LANGFUSE_BASE_URL: "Your Langfuse address, such as http://localhost:5174 or https://cloud.langfuse.com.",
+  LANGFUSE_PUBLIC_KEY: "The Langfuse project's public key. npm run setup writes the local project's.",
+  LANGFUSE_SECRET_KEY: "The Langfuse project's secret key. npm run setup writes the local project's.",
+  LANGFUSE_BASE_URL: "The Langfuse address: http://localhost:3100 locally, or your Langfuse Cloud region.",
 } as const;
 
 export type Setting = keyof typeof SETTINGS;

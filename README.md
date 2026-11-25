@@ -37,6 +37,14 @@ It creates the company Bramble Studio and three people:
 
 Their password is `SEED_USER_PASSWORD` in your `.env`. Then add your OpenRouter key to `.env` as `OPENROUTER_API_KEY`.
 
+Langfuse records every run, so you can see what each teammate did and what it cost. Start it once setup is done:
+
+```bash
+npm run langfuse:up
+```
+
+Open http://localhost:3100 and sign in as `admin@bramble.example`. The password is `LANGFUSE_INIT_USER_PASSWORD` in `langfuse/.env`.
+
 To start the services again after a restart:
 
 ```bash

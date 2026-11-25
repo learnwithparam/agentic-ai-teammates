@@ -8,7 +8,7 @@
 // with the password in your own .env (SEED_USER_PASSWORD).
 
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,7 @@ import { modelJson } from "./fga-model";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const envFile = path.join(root, ".env");
+const langfuseEnvFile = path.join(root, "langfuse", ".env");
 const REALM = "teammates";
 const CLIENT_ID = "mission-control";
 const AUDIENCE = "mission-control-api";
@@ -31,22 +32,60 @@ const APP_URL = "http://localhost:3333";
 
 const secret = () => randomBytes(24).toString("base64url");
 
-function setEnv(values: Record<string, string>) {
-  const lines = existsSync(envFile) ? readFileSync(envFile, "utf8").split("\n") : [];
+function setEnv(values: Record<string, string>, file = envFile) {
+  const lines = existsSync(file) ? readFileSync(file, "utf8").split("\n") : [];
   for (const [name, value] of Object.entries(values)) {
     const at = lines.findIndex((line) => line.startsWith(`${name}=`));
     if (at >= 0) lines[at] = `${name}=${value}`;
     else lines.splice(lines.at(-1) === "" ? lines.length - 1 : lines.length, 0, `${name}=${value}`);
   }
-  writeFileSync(envFile, `${lines.join("\n").replace(/\n*$/, "")}\n`, { mode: 0o600 });
+  writeFileSync(file, `${lines.join("\n").replace(/\n*$/, "")}\n`, { mode: 0o600 });
 }
 
-function ensureSettings(): Record<string, string> {
-  const current = existsSync(envFile) ? parse(readFileSync(envFile)) : {};
+// Reads a settings file and returns a want() that keeps a value already there or makes a new one.
+function settingsFile(file: string) {
+  const current = existsSync(file) ? parse(readFileSync(file)) : {};
   const missing: Record<string, string> = {};
   const want = (name: string, make: () => string) => {
     if (!current[name]) missing[name] = make();
+    return missing[name] ?? current[name];
   };
+  const save = () => {
+    if (Object.keys(missing).length === 0) return;
+    setEnv(missing, file);
+    console.log(`Written to ${path.relative(root, file)} (values not shown): ${Object.keys(missing).join(", ")}`);
+  };
+  return { current, missing, want, save };
+}
+
+// Langfuse runs from its own compose file (langfuse/) with its own settings file there, because
+// its names (DATABASE_URL, POSTGRES_PASSWORD) are the same as the app's. The project and its
+// keys are created on Langfuse's first start, and the app's settings get the same keys.
+function ensureLangfuseSettings(): Record<string, string> {
+  const langfuse = settingsFile(langfuseEnvFile);
+  const postgres = langfuse.want("POSTGRES_PASSWORD", () => randomBytes(24).toString("hex"));
+  langfuse.want("DATABASE_URL", () => `postgresql://postgres:${postgres}@postgres:5432/postgres`);
+  for (const name of ["SALT", "NEXTAUTH_SECRET", "CLICKHOUSE_PASSWORD", "REDIS_AUTH"]) langfuse.want(name, () => randomBytes(24).toString("hex"));
+  // Langfuse needs exactly 256 bits here, written as 64 hex characters.
+  langfuse.want("ENCRYPTION_KEY", () => randomBytes(32).toString("hex"));
+  const storage = langfuse.want("MINIO_ROOT_PASSWORD", () => randomBytes(24).toString("hex"));
+  for (const use of ["EVENT_UPLOAD", "MEDIA_UPLOAD", "BATCH_EXPORT"]) langfuse.want(`LANGFUSE_S3_${use}_SECRET_ACCESS_KEY`, () => storage);
+  langfuse.want("LANGFUSE_INIT_ORG_ID", () => "bramble");
+  langfuse.want("LANGFUSE_INIT_ORG_NAME", () => "Bramble Studio");
+  langfuse.want("LANGFUSE_INIT_PROJECT_ID", () => "mission-control");
+  langfuse.want("LANGFUSE_INIT_PROJECT_NAME", () => "Mission Control");
+  const publicKey = langfuse.want("LANGFUSE_INIT_PROJECT_PUBLIC_KEY", () => `pk-lf-${randomUUID()}`);
+  const secretKey = langfuse.want("LANGFUSE_INIT_PROJECT_SECRET_KEY", () => `sk-lf-${randomUUID()}`);
+  langfuse.want("LANGFUSE_INIT_USER_EMAIL", () => "admin@bramble.example");
+  langfuse.want("LANGFUSE_INIT_USER_NAME", () => "Langfuse admin");
+  langfuse.want("LANGFUSE_INIT_USER_PASSWORD", secret);
+  langfuse.save();
+  return { LANGFUSE_PUBLIC_KEY: publicKey, LANGFUSE_SECRET_KEY: secretKey, LANGFUSE_BASE_URL: "http://localhost:3100" };
+}
+
+function ensureSettings(): Record<string, string> {
+  const { current, missing, want, save } = settingsFile(envFile);
+  for (const [name, value] of Object.entries(ensureLangfuseSettings())) want(name, () => value);
   for (const name of ["POSTGRES_PASSWORD", "KEYCLOAK_DB_PASSWORD", "OPENFGA_DB_PASSWORD", "TEAMMATES_DB_PASSWORD"]) want(name, secret);
   for (const name of ["KEYCLOAK_ADMIN_PASSWORD", "FGA_API_TOKEN", "OIDC_CLIENT_SECRET", "SEED_USER_PASSWORD"]) want(name, secret);
   want("S3_ACCESS_KEY_ID", () => `teammates-${randomBytes(6).toString("hex")}`);
@@ -63,10 +102,7 @@ function ensureSettings(): Record<string, string> {
   want("FGA_API_URL", () => FGA);
   want("S3_ENDPOINT", () => "http://localhost:9100");
   want("S3_REGION", () => "us-east-1");
-  if (Object.keys(missing).length) {
-    setEnv(missing);
-    console.log(`Written to .env (values not shown): ${Object.keys(missing).join(", ")}`);
-  }
+  save();
   return { ...current, ...missing };
 }
 
