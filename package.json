@@ -1,0 +1,29 @@
+{
+  "name": "agentic-ai-teammates",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "tsx scripts/setup.ts",
+    "infra:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d --wait",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md && tsx scripts/check-repo.ts"
+  },
+  "dependencies": {
+    "@openfga/sdk": "0.9.8",
+    "dotenv": "18.0.10"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "plainEnglish": {
+    "grade": 6,
+    "longest": 18,
+    "average": 12
+  }
+}

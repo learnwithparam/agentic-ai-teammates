@@ -1,0 +1,58 @@
+# Run by npm run check (scripts/fga-model.test.ts) with the OpenFGA CLI. No server needed.
+name: mission control permissions
+model_file: ./model.fga
+
+tuples:
+  - { user: "org:bramble", relation: org, object: "teammate:bramble-invoice" }
+  - { user: "org:bramble", relation: org, object: "approval:bill-1" }
+  - { user: "org:other", relation: org, object: "approval:other-bill" }
+
+tests:
+  - name: an approver decides an amount within their limit, not above it
+    tuples:
+      - { user: "user:ravi", relation: member, object: "org:bramble" }
+      - { user: "user:ravi", relation: approver, object: "org:bramble", condition: { name: within_limit, context: { limit: 5000 } } }
+    check:
+      - user: "user:ravi"
+        object: "approval:bill-1"
+        context: { amount: 4999.5 }
+        assertions: { can_decide: true, can_view: true }
+      - user: "user:ravi"
+        object: "approval:bill-1"
+        context: { amount: 5000.01 }
+        assertions: { can_decide: false, can_view: true }
+
+  - name: an admin decides any amount
+    tuples:
+      - { user: "user:ada", relation: member, object: "org:bramble" }
+      - { user: "user:ada", relation: admin, object: "org:bramble" }
+    check:
+      - user: "user:ada"
+        object: "approval:bill-1"
+        context: { amount: 250000 }
+        assertions: { can_decide: true }
+      - user: "user:ada"
+        object: "teammate:bramble-invoice"
+        assertions: { can_configure: true, can_view: true }
+
+  - name: a viewer sees but never decides
+    tuples:
+      - { user: "user:mei", relation: member, object: "org:bramble" }
+    check:
+      - user: "user:mei"
+        object: "approval:bill-1"
+        context: { amount: 1 }
+        assertions: { can_decide: false, can_view: true }
+      - user: "user:mei"
+        object: "teammate:bramble-invoice"
+        assertions: { can_configure: false, can_view: true }
+
+  - name: another company's approval is out of reach, even for an admin
+    tuples:
+      - { user: "user:ada", relation: member, object: "org:bramble" }
+      - { user: "user:ada", relation: admin, object: "org:bramble" }
+    check:
+      - user: "user:ada"
+        object: "approval:other-bill"
+        context: { amount: 1 }
+        assertions: { can_decide: false, can_view: false }

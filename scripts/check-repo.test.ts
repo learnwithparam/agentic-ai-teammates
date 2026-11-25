@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { findProblems } from "./check-repo";
+
+const manifest = JSON.stringify({ engines: { node: ">=26" }, dependencies: { zod: "4.6.7" }, scripts: {} });
+
+function problemsFor(extra: Record<string, string>) {
+  const files = new Map<string, string>([["package.json", manifest], ...Object.entries(extra)]);
+  return findProblems(files, [...files.keys()]);
+}
+
+test("a stand-in word in app code fails", () => {
+  const problems = problemsFor({ "src/server/model.ts": "export const reply = 'a canned answer';" });
+  assert.match(problems.join("\n"), /src\/server\/model\.ts: says "canned"/);
+});
+
+test("a stand-in word in a test file is allowed", () => {
+  assert.deepEqual(problemsFor({ "src/server/model.test.ts": "// a fake clock" }), []);
+});
+
+test("reading process.env outside env.ts fails", () => {
+  const problems = problemsFor({ "src/server/worker.ts": "const key = process.env.OPENROUTER_API_KEY;" });
+  assert.match(problems.join("\n"), /worker\.ts: reads process\.env/);
+  assert.deepEqual(problemsFor({ "src/server/env.ts": "const key = process.env.OPENROUTER_API_KEY;" }), []);
+});
+
+test("a range version fails", () => {
+  const files = new Map([["package.json", JSON.stringify({ dependencies: { zod: "^4.6.7" } })]]);
+  assert.match(findProblems(files, ["package.json"]).join("\n"), /Pin an exact version/);
+});
+
+test("a script nothing calls fails", () => {
+  const problems = problemsFor({ "scripts/orphan.ts": "console.log(1);" });
+  assert.match(problems.join("\n"), /scripts\/orphan\.ts: nothing in use/);
+});

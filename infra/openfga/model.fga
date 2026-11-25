@@ -1,0 +1,36 @@
+model
+  schema 1.1
+
+# Who may see and decide what in Mission Control. A person's company and role come from their
+# signed Keycloak token and are sent with each question as contextual tuples, so Keycloak stays
+# the one place they are kept. An approval's company is stored when the teammate asks for it.
+
+type user
+
+# A company using Mission Control. Each one is a Keycloak organization.
+type org
+  relations
+    # Everyone in the company's Keycloak organization. A member with no role only views.
+    define member: [user]
+    define admin: [user]
+    # An approver decides up to their own limit, an attribute only a Keycloak admin sets.
+    define approver: [user with within_limit]
+
+# A teammate: the invoice teammate or the news teammate of one company.
+type teammate
+  relations
+    define org: [org]
+    define can_view: member from org
+    define can_configure: admin from org
+
+# One action a teammate asked a person to decide, such as posting a bill whose checks failed.
+type approval
+  relations
+    define org: [org]
+    define can_view: member from org
+    # An admin decides any amount; an approver only up to their limit.
+    define can_decide: admin from org or approver from org
+
+condition within_limit(amount: double, limit: double) {
+  amount <= limit
+}
