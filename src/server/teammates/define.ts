@@ -1,3 +1,4 @@
+import type { Attack } from "./attacks";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type { ToolName } from "../tools";
 import type { Teammate } from "../worker-loop";
@@ -48,6 +49,8 @@ export type TeammateDefinition = {
   // The script that scores this teammate with real model calls, from the repo root. It is the
   // evidence for turning Quiet off: npm run teammate:eval -- <kind> runs it.
   evaluate: string;
+  // The attacks only this teammate's job faces. npm run teammate:attack adds the shared ones.
+  attacks: Attack[];
   // Builds the function that turns one batch of inbox events into work.
   work: (checkpointer: BaseCheckpointSaver) => Teammate;
 };

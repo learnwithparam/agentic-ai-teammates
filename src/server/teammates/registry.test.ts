@@ -8,6 +8,7 @@ import { Inbox } from "../inbox";
 import { testDatabase } from "../test-database";
 import { TOOLS } from "../tools";
 import { workInbox } from "../worker-loop";
+import { sharedAttacks } from "./attacks";
 import { defineTeammate } from "./define";
 import { ensureTeammates } from "./ensure";
 import { TEAMMATES } from "./registry";
@@ -30,6 +31,15 @@ test("every tool is used by some teammate, and every teammate has its own folder
     for (const file of ["teammate.ts", "work.ts", "graph.ts"]) assert.ok(existsSync(path.join(folder, file)), `${teammate.kind} has no ${file}`);
     // Every teammate is scored before anyone turns Quiet off.
     assert.ok(existsSync(path.join(import.meta.dirname, "../../..", teammate.evaluate)), `${teammate.kind}'s eval ${teammate.evaluate} is missing`);
+    // Every teammate faces the shared attacks and at least one of its own.
+    assert.ok(teammate.attacks.length > 0, `${teammate.kind} has no attacks of its own`);
+    const all = [...sharedAttacks(teammate), ...teammate.attacks];
+    assert.equal(new Set(all.map((attack) => attack.name)).size, all.length, `${teammate.kind} has two attacks with one name`);
+    for (const attack of all) {
+      for (const tool of attack.expect.neverTools ?? []) assert.ok(teammate.tools.includes(tool), `${attack.name}: ${tool} is not ${teammate.kind}'s tool`);
+      if ("handOver" in attack.send) assert.ok(existsSync(path.join(import.meta.dirname, "../../..", attack.send.handOver)), `${attack.name}: ${attack.send.handOver} is missing`);
+      if ("call" in attack.send) assert.equal(attack.expect.refused, true, `${attack.name} calls a tool, so it must expect a refusal`);
+    }
   }
 });
 

@@ -1,3 +1,4 @@
+import { attacks } from "./attacks";
 import { DIGEST, defineTeammate, TIDY } from "../define";
 import { invoiceTeammate } from "./work";
 
@@ -41,5 +42,6 @@ export const invoice = defineTeammate({
     tidy: true,
   },
   evaluate: "data/invoices/run.ts",
+  attacks,
   work: invoiceTeammate,
 });
