@@ -40,9 +40,8 @@ test("each teammate reads only its own folder, and no path leaves it", async () 
   await assert.rejects(memory.setInstructions(scope, "x".repeat(4001)), /at most/);
 });
 
-test("a vendor's note is named from its name, whatever the invoice wrote", () => {
-  assert.equal(vendorTopic("Lumen Print House"), "vendor-lumen-print-house");
-  assert.equal(vendorTopic("Café Ünder / ../etc"), "vendor-cafe-under-etc");
-  assert.equal(vendorTopic("!!!"), "vendor-unnamed");
-  assert.equal(notePath(vendorTopic("x".repeat(200))), `notes/vendor-${"x".repeat(55)}.md`);
+test("a vendor's note is named by its QuirkBooks id, never by what the invoice wrote", () => {
+  assert.equal(vendorTopic("V-001"), "vendor-v-001");
+  assert.throws(() => vendorTopic("../V-001"), /is not a note name/);
+  assert.throws(() => vendorTopic("Lumen Print House"), /is not a note name/);
 });

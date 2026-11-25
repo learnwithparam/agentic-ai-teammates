@@ -189,7 +189,9 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
   async function recall(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
     const run = runOf(config);
     const read = async (path: string) => done(await run.tool(threadOf(config), "memory.read", { path }), MemoryText).text;
-    const recalled = { instructions: await read(INSTRUCTIONS), pastDecisions: await read(notePath(vendorTopic(state.invoice!.vendorName))) };
+    // Past decisions come only through the vendor QuirkBooks matched, never the name the invoice gives.
+    const vendor = state.facts?.vendor;
+    const recalled = { instructions: await read(INSTRUCTIONS), pastDecisions: vendor ? await read(notePath(vendorTopic(vendor.id))) : null };
     if (recalled.pastDecisions) await run.note("note", "A person decided on this vendor before", {});
     return { recalled };
   }

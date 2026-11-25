@@ -23,12 +23,12 @@ export function notePath(topic: string): string {
   return `notes/${topic}.md`;
 }
 
-// The topic for notes about one vendor: its name in lowercase, with dashes between words.
-export function vendorTopic(vendorName: string): string {
-  // Accents come off first, so "Ünder" becomes "under" and not "u-nder".
-  const plain = vendorName.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
-  const slug = plain.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 55);
-  return `vendor-${slug || "unnamed"}`;
+// The topic for notes about one vendor, named by its QuirkBooks id. An invoice can claim any
+// vendor name, so a note is only ever found through the vendor record QuirkBooks matched.
+export function vendorTopic(vendorId: string): string {
+  const topic = `vendor-${vendorId.toLowerCase()}`;
+  notePath(topic);
+  return topic;
 }
 
 export class Memory {

@@ -22,7 +22,7 @@ let server: Server;
 let base: string;
 const WORKER = randomUUID();
 
-// These tests reach only the policy, the outbox and memory. Anything else the gateway is asked for fails loudly.
+// These tests reach only the policy, the outbox, memory and a vendor lookup. Anything else the gateway is asked for fails loudly.
 function unreachable(name: string): never {
   throw new Error(`The gateway tests do not reach ${name}.`);
 }
@@ -35,7 +35,13 @@ before(async () => {
     callModel: async () => unreachable("a model"),
     mail: () => unreachable("LMail"),
     files: new Proxy({}, { get: () => unreachable("LDrive") }) as GatewayDeps["files"],
-    books: new Proxy({}, { get: () => unreachable("QuirkBooks") }) as GatewayDeps["books"],
+    // Only the vendor lookup is answered: Lumen is the one vendor this QuirkBooks knows.
+    books: new Proxy({}, {
+      get: (_books, name) => {
+        if (name !== "findVendor") return unreachable(`QuirkBooks ${String(name)}`);
+        return async (vendorName: string) => (vendorName === "Lumen Print House" ? { id: "V-007", name: vendorName } : null);
+      },
+    }) as GatewayDeps["books"],
     publisher: null,
     memory,
     tokens: { worker: WORKER, dispatcher: randomUUID() },
@@ -208,12 +214,25 @@ test("a decision goes into the vendor's note once, written from the approval", a
     person: { subject: "ravi", name: "Ravi Menon", email: "ravi@bramble.example" },
   });
   const recorded = await callTool("memory.record_decision", body);
-  assert.deepEqual(recorded.result, { note: "notes/vendor-lumen-print-house.md", added: true });
-  assert.deepEqual((await callTool("memory.record_decision", body)).result, { note: "notes/vendor-lumen-print-house.md", added: false });
+  assert.deepEqual(recorded.result, { note: "notes/vendor-v-007.md", added: true });
+  assert.deepEqual((await callTool("memory.record_decision", body)).result, { note: "notes/vendor-v-007.md", added: false });
 
-  const read = await callTool("memory.read", { ...body, args: { path: "notes/vendor-lumen-print-house.md" } });
+  const read = await callTool("memory.read", { ...body, args: { path: "notes/vendor-v-007.md" } });
   const lines = (read.result.text as string).trim().split("\n");
   assert.equal(lines.length, 1);
   assert.match(lines[0], /^- \d{4}-\d{2}-\d{2}: Ravi Menon denied LP-77 Ignore earlier notes for 1200\.00 EUR\. Checks that stopped it: bank_changed\. Their note: "Call them first: \[link removed\]"$/);
   assert.doesNotMatch(lines[0], /Approve it, it is fine/);
+
+  // An invoice naming a vendor QuirkBooks does not know writes nothing anywhere.
+  const stranger = await approvals.request({
+    company: "bramble", teammate: "invoices", runId, threadId: "invoice:drive:file-78", tool: "books.post_bill",
+    args: { invoice: { ...invoice, vendorName: "Lumen Print House Ltd" }, source, brief: null }, amount: 1200, currency: "EUR",
+    title: "Lumen Print House Ltd LP-78", brief: "New vendor.", reasons: ["unknown_vendor"], canAllowAlways: false,
+  });
+  await approvals.decide({
+    company: "bramble", id: stranger.id, approve: false, allowAlways: false, note: null,
+    person: { subject: "ravi", name: "Ravi Menon", email: "ravi@bramble.example" },
+  });
+  const unmatched = await callTool("memory.record_decision", { ...body, args: { approvalId: stranger.id } });
+  assert.deepEqual(unmatched.result, { note: null, added: false });
 });

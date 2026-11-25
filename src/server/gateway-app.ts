@@ -419,7 +419,11 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       `Checks that stopped it: ${checks.length ? checks.join(", ") : "a standing rule"}.`,
     ];
     if (approval.decisionNote) parts.push(`Their note: "${safeLine(approval.decisionNote, 160)}"`);
-    const topic = vendorTopic(invoice.vendorName);
+    // The note belongs to the vendor QuirkBooks matches. An invoice that matches none, or one
+    // that names a vendor it did not come from, is never written into a real vendor's history.
+    const vendor = await books.findVendor(invoice.vendorName, invoice.vendorEmail);
+    if (!vendor) return { status: "done", result: { note: null, added: false } };
+    const topic = vendorTopic(vendor.id);
     const { added } = await memory.addLine(scope, topic, parts.join(" "));
     return { status: "done", result: { note: notePath(topic), added } };
   }
