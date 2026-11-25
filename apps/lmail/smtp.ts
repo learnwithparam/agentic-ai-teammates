@@ -1,5 +1,6 @@
 import { simpleParser } from "mailparser";
 import { SMTPServer } from "smtp-server";
+import { LOOPBACK } from "../shared/server";
 import { type MailStore, normalize } from "./store";
 
 // LMail's front door for mail: a real SMTP server, so any mail client or swaks can send it an
@@ -50,6 +51,6 @@ export function startSmtp(store: MailStore, port: number) {
     },
   });
   server.on("error", (error) => console.error("smtp:", error.message));
-  server.listen(port, () => console.log(`LMail SMTP listening on port ${port}`));
+  server.listen(port, LOOPBACK, () => console.log(`LMail SMTP listening on port ${port}`));
   return server;
 }

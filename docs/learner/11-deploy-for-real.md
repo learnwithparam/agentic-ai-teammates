@@ -75,6 +75,11 @@ docker compose -f deploy/docker-compose.yml --profile public up -d --build --wai
 ```
 
 Open your domain and sign in. Keycloak is now at `auth.` in front of your domain.
+Only its sign-in pages are public. For the admin console, open a tunnel from your laptop, then visit port 8190 on localhost:
+
+```bash
+ssh -L 8190:localhost:8190 you@your-server
+```
 
 Keep two things safe. The `.env` file holds every secret. The Postgres and MinIO volumes hold every invoice, run and memory note.
 

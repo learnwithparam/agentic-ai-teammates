@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { browserAddresses, KEYCLOAK_PORT, WEB_PORT, WORLD } from "./addresses.ts";
+import { browserAddresses, KEYCLOAK_PORT, REALM, WEB_PORT, WORLD } from "./addresses.ts";
 
 test("without a public domain every address is a localhost port", () => {
   assert.deepEqual(browserAddresses(), {
@@ -31,12 +31,22 @@ test("a public domain with a scheme, a path or a port is refused", () => {
   }
 });
 
-test("the Caddyfile sends each public name to the port its local address uses", () => {
+// Each public name and the text of its block in the Caddyfile.
+function caddyBlocks(): Map<string, string> {
   const caddy = readFileSync(new URL("../deploy/Caddyfile", import.meta.url), "utf8");
-  const routes = new Map([...caddy.matchAll(/^(\S*)\{\$PUBLIC_DOMAIN\} \{\n\treverse_proxy localhost:(\d+)\n\}/gm)]
-    .map(([, name, port]) => [name, Number(port)]));
+  return new Map([...caddy.matchAll(/^(\S*)\{\$PUBLIC_DOMAIN\} \{\n([\s\S]*?)^\}/gm)].map(([, name, body]) => [name, body]));
+}
+
+test("the Caddyfile sends each public name to the port its local address uses", () => {
+  const routes = new Map([...caddyBlocks()].map(([name, body]) => [name, Number(body.match(/reverse_proxy localhost:(\d+)/)?.[1])]));
   const expected = new Map<string, number>([["", WEB_PORT], ["auth.", KEYCLOAK_PORT], ...WORLD.map((app) => [`${app.subdomain}.`, app.port] as [string, number])]);
   assert.deepEqual(routes, expected);
+});
+
+test("the public Keycloak name serves sign-in only, never the admin console", () => {
+  const auth = caddyBlocks().get("auth.") ?? "";
+  assert.match(auth, new RegExp(`@signin path /realms/${REALM}/\\* /resources/\\*\n`));
+  assert.match(auth, /handle @signin \{\n\t\treverse_proxy localhost:\d+\n\t\}\n\trespond 404\n$/);
 });
 
 test("Keycloak takes its hostname from the setting, with the laptop address when it is missing", () => {

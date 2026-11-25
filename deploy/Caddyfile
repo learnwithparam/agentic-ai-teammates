@@ -5,8 +5,14 @@
 	reverse_proxy localhost:8790
 }
 
+# Only sign-in is public. The admin console and the master realm answer 404 here: reach them
+# over an SSH tunnel to port 8190 instead.
 auth.{$PUBLIC_DOMAIN} {
-	reverse_proxy localhost:8190
+	@signin path /realms/teammates/* /resources/*
+	handle @signin {
+		reverse_proxy localhost:8190
+	}
+	respond 404
 }
 
 mail.{$PUBLIC_DOMAIN} {

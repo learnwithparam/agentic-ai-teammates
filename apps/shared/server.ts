@@ -58,9 +58,12 @@ export const handleErrors: ErrorRequestHandler = (error, request, response, _nex
   response.status(500).json({ error: "Something went wrong on our side. Try again in a moment." });
 };
 
+// Every process listens on this machine only. On a server, Caddy is the one door in.
+export const LOOPBACK = "127.0.0.1";
+
 export function listen(app: Express, name: string, port: number) {
   app.use(handleErrors);
-  const server = app.listen(port, () => console.log(`${name} listening on http://localhost:${port}`));
+  const server = app.listen(port, LOOPBACK, () => console.log(`${name} listening on http://localhost:${port}`));
   const stop = () => server.close(() => process.exit(0));
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
