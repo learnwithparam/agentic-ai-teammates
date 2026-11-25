@@ -217,7 +217,7 @@ export class MailStore {
   async watch(mailbox: string, url: string, client: string) {
     const { rows } = await this.pool.query<{ expires_at: Date; history_id: string }>(
       `INSERT INTO watches (mailbox, url, client, expires_at) VALUES ($1, $2, $3, now() + make_interval(days => ${WATCH_DAYS}))
-       ON CONFLICT (mailbox, url) DO UPDATE SET expires_at = excluded.expires_at, client = excluded.client
+       ON CONFLICT (mailbox, client) DO UPDATE SET url = excluded.url, expires_at = excluded.expires_at
        RETURNING expires_at, (SELECT history_id FROM mailboxes WHERE address = $1)`,
       [normalize(mailbox), url, client],
     );

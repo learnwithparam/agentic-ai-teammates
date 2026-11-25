@@ -1,0 +1,98 @@
+# Every process, from one image, on the machine that runs infra/docker-compose.yml.
+#
+#   npm run setup                                  # the platform, the realm, the people
+#   docker compose -f deploy/docker-compose.yml up -d --build --wait
+#
+# Each process uses the host's network, so it reaches Postgres, Keycloak, OpenFGA and MinIO on
+# the same localhost ports as in development, with the same settings file. Nothing else listens
+# in public: with PUBLIC_DOMAIN set, the proxy service (profile "public") puts TLS in front of
+# the four pages and the sign-in, and those are the only ports open to the internet.
+name: teammates-app
+
+x-process: &process
+  image: agentic-ai-teammates:latest
+  network_mode: host
+  restart: unless-stopped
+  env_file: ../.env
+
+# A process with a web port is healthy when it answers /healthz.
+x-healthy: &healthy
+  interval: 5s
+  timeout: 3s
+  retries: 20
+
+services:
+  lmail:
+    <<: *process
+    build: ..
+    command: ["node_modules/.bin/tsx", "apps/lmail/main.ts"]
+    healthcheck:
+      <<: *healthy
+      test: ["CMD", "node", "-e", "fetch('http://localhost:' + process.env.LMAIL_PORT + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  ldrive:
+    <<: *process
+    command: ["node_modules/.bin/tsx", "apps/ldrive/main.ts"]
+    depends_on: { lmail: { condition: service_started } }
+    healthcheck:
+      <<: *healthy
+      test: ["CMD", "node", "-e", "fetch('http://localhost:' + process.env.LDRIVE_PORT + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  quirkbooks:
+    <<: *process
+    command: ["node_modules/.bin/tsx", "apps/quirkbooks/main.ts"]
+    depends_on: { lmail: { condition: service_started } }
+    healthcheck:
+      <<: *healthy
+      test: ["CMD", "node", "-e", "fetch('http://localhost:' + process.env.QUIRKBOOKS_PORT + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  gateway:
+    <<: *process
+    command: ["node_modules/.bin/tsx", "src/server/gateway.ts"]
+    depends_on:
+      lmail: { condition: service_healthy }
+      ldrive: { condition: service_healthy }
+      quirkbooks: { condition: service_healthy }
+    healthcheck:
+      <<: *healthy
+      test: ["CMD", "node", "-e", "fetch('http://localhost:' + process.env.GATEWAY_PORT + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  web:
+    <<: *process
+    command: ["node_modules/.bin/tsx", "src/server/web.ts"]
+    depends_on: { gateway: { condition: service_healthy } }
+    healthcheck:
+      <<: *healthy
+      test: ["CMD", "node", "-e", "fetch('http://localhost:' + process.env.PORT + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  # These three have no web port. Compose restarts one that exits.
+  worker:
+    <<: *process
+    command: ["node_modules/.bin/tsx", "src/server/worker.ts"]
+    depends_on: { web: { condition: service_healthy } }
+
+  scheduler:
+    <<: *process
+    command: ["node_modules/.bin/tsx", "src/server/scheduler.ts"]
+    depends_on: { web: { condition: service_healthy } }
+
+  dispatcher:
+    <<: *process
+    command: ["node_modules/.bin/tsx", "src/server/dispatcher.ts"]
+    depends_on: { web: { condition: service_healthy } }
+
+  # TLS for PUBLIC_DOMAIN and its auth, mail, drive and books names. Caddy gets the certificates.
+  proxy:
+    image: caddy:2.10.2
+    profiles: ["public"]
+    network_mode: host
+    restart: unless-stopped
+    # The Caddyfile reads PUBLIC_DOMAIN from here; without it Caddy refuses to start.
+    env_file: ../.env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: { web: { condition: service_healthy } }
+
+volumes:
+  caddy_data:

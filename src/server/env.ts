@@ -12,7 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 config({ path: path.resolve(here, "../../.env"), quiet: true });
 
 const SETTINGS = {
-  APP_URL: "The address people open, such as http://localhost:3333. npm run setup writes it.",
+  APP_URL: "The address people open, such as http://localhost:8790. npm run setup writes it.",
   PORT: "The port the web process listens on. npm run setup writes it.",
   DATABASE_URL: "Mission Control's own Postgres. npm run setup writes it.",
   TEST_DATABASE_URL: "The tests' own Postgres database. npm run setup writes it.",

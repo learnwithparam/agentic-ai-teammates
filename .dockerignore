@@ -1,0 +1,9 @@
+node_modules
+news/node_modules
+dist
+.git
+.env
+.env.*
+langfuse/.env
+my-scoreboard.md
+.playwright-cli

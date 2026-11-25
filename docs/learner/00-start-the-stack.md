@@ -67,10 +67,10 @@ npm run web
 Check that each one answers:
 
 ```bash
-for port in 8787 8788 8801 8802 8803; do curl -s -o /dev/null -w "$port %{http_code}\n" localhost:$port/healthz; done
+for port in 8790 8788 8801 8802 8803; do curl -s -o /dev/null -w "$port %{http_code}\n" localhost:$port/healthz; done
 ```
 
-Each line should end in 200. Open http://localhost:8787 and sign in as `ada@bramble.example`.
+Each line should end in 200. Open http://localhost:8790 and sign in as `ada@bramble.example`.
 The password is `SEED_USER_PASSWORD` in `.env`.
 
 ![Mission Control after sign-in](../images/board.png)

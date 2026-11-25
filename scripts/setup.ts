@@ -15,25 +15,20 @@ import { fileURLToPath } from "node:url";
 import { CredentialsMethod, OpenFgaClient } from "@openfga/sdk";
 import { parse } from "dotenv";
 import { COMPANIES, ROLES, SEED_PEOPLE, type Role, type SeedPerson } from "../src/server/people";
+import { browserAddresses, KEYCLOAK_PORT, REALM, WEB_PORT, WORLD } from "./addresses";
 import { modelJson } from "./fga-model";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const envFile = path.join(root, ".env");
 const langfuseEnvFile = path.join(root, "langfuse", ".env");
-const REALM = "teammates";
 const CLIENT_ID = "mission-control";
 const AUDIENCE = "mission-control-api";
-const KEYCLOAK = "http://localhost:8190";
 const FGA = "http://localhost:8290";
 const FGA_STORE_NAME = "mission-control";
-const APP_URL = "http://localhost:3333";
-
-// The three apps the teammates work in, each its own service with its own database and sign-in.
-const WORLD = [
-  { id: "lmail", prefix: "LMAIL", name: "LMail", port: 8801 },
-  { id: "ldrive", prefix: "LDRIVE", name: "LDrive", port: 8802 },
-  { id: "quirkbooks", prefix: "QUIRKBOOKS", name: "QuirkBooks", port: 8803 },
-] as const;
+// Setup talks to Keycloak on this machine, whatever name people use to reach it.
+const KEYCLOAK = `http://localhost:${KEYCLOAK_PORT}`;
+// Mission Control's web process: the board, the sign-in callback and the apps' notices.
+const WEB = `http://localhost:${WEB_PORT}`;
 
 // ---------- .env: generate what is missing, keep what is there ----------
 
@@ -59,12 +54,16 @@ function settingsFile(file: string) {
     if (!current[name]) missing[name] = make();
     return missing[name] ?? current[name];
   };
+  // For values derived from other settings: written again whenever they change.
+  const put = (name: string, value: string) => {
+    if (current[name] !== value) missing[name] = value;
+  };
   const save = () => {
     if (Object.keys(missing).length === 0) return;
     setEnv(missing, file);
     console.log(`Written to ${path.relative(root, file)} (values not shown): ${Object.keys(missing).join(", ")}`);
   };
-  return { current, missing, want, save };
+  return { current, missing, want, put, save };
 }
 
 // Langfuse runs from its own compose file (langfuse/) with its own settings file there, because
@@ -93,7 +92,7 @@ function ensureLangfuseSettings(): Record<string, string> {
 }
 
 function ensureSettings(): Record<string, string> {
-  const { current, missing, want, save } = settingsFile(envFile);
+  const { current, missing, want, put, save } = settingsFile(envFile);
   for (const [name, value] of Object.entries(ensureLangfuseSettings())) want(name, () => value);
   for (const name of ["POSTGRES_PASSWORD", "KEYCLOAK_DB_PASSWORD", "OPENFGA_DB_PASSWORD", "TEAMMATES_DB_PASSWORD"]) want(name, secret);
   for (const name of ["KEYCLOAK_ADMIN_PASSWORD", "FGA_API_TOKEN", "OIDC_CLIENT_SECRET", "SEED_USER_PASSWORD"]) want(name, secret);
@@ -102,11 +101,10 @@ function ensureSettings(): Record<string, string> {
   const database = missing.TEAMMATES_DB_PASSWORD ?? current.TEAMMATES_DB_PASSWORD;
   want("DATABASE_URL", () => `postgresql://teammates:${database}@localhost:5452/teammates`);
   want("TEST_DATABASE_URL", () => `postgresql://teammates:${database}@localhost:5452/teammates_test`);
-  // Addresses, not secrets: written once so every process reads the same ones.
-  want("APP_URL", () => APP_URL);
-  want("PORT", () => "8787");
-  want("HOOKS_URL", () => "http://localhost:8787");
-  want("OIDC_ISSUER", () => `${KEYCLOAK}/realms/${REALM}`);
+  // Addresses, not secrets. The ones a browser opens follow PUBLIC_DOMAIN; the rest stay local.
+  for (const [name, value] of Object.entries(browserAddresses(current.PUBLIC_DOMAIN))) put(name, value);
+  want("PORT", () => String(WEB_PORT));
+  want("HOOKS_URL", () => WEB);
   want("OIDC_CLIENT_ID", () => CLIENT_ID);
   want("OIDC_AUDIENCE", () => AUDIENCE);
   want("FGA_API_URL", () => FGA);
@@ -118,7 +116,6 @@ function ensureSettings(): Record<string, string> {
   for (const app of WORLD) {
     const password = want(`${app.prefix}_DB_PASSWORD`, secret);
     want(`${app.prefix}_DATABASE_URL`, () => `postgresql://${app.id}:${password}@localhost:5452/${app.id}`);
-    want(`${app.prefix}_URL`, () => `http://localhost:${app.port}`);
     want(`${app.prefix}_PORT`, () => String(app.port));
     want(`${app.prefix}_CLIENT_SECRET`, secret);
     want(`${app.prefix}_API_KEY`, secret);
@@ -134,14 +131,21 @@ function ensureSettings(): Record<string, string> {
 // ---------- Keycloak admin API ----------
 
 let adminToken = "";
+let adminPassword = "";
 
 async function keycloak(method: string, route: string, body?: unknown): Promise<Response> {
-  const response = await fetch(`${KEYCLOAK}/admin/realms${route}`, {
+  const send = () => fetch(`${KEYCLOAK}/admin/realms${route}`, {
     method,
     headers: { Authorization: `Bearer ${adminToken}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(30_000),
   });
+  let response = await send();
+  // The admin token lives for a minute. A long setup outlives it, so sign in again once.
+  if (response.status === 401) {
+    await signInAsAdmin(adminPassword);
+    response = await send();
+  }
   if (!response.ok && response.status !== 404 && response.status !== 409) {
     throw new Error(`Keycloak ${method} ${route} answered ${response.status}: ${(await response.text()).slice(0, 300)}`);
   }
@@ -154,6 +158,7 @@ async function keycloakJson<T>(route: string): Promise<T | null> {
 }
 
 async function signInAsAdmin(password: string) {
+  adminPassword = password;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
       const response = await fetch(`${KEYCLOAK}/realms/master/protocol/openid-connect/token`, {

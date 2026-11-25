@@ -1,0 +1,22 @@
+# The public names. Each one points at a port that listens on this machine only.
+# Point PUBLIC_DOMAIN and the four names below it at this machine before starting the proxy.
+
+{$PUBLIC_DOMAIN} {
+	reverse_proxy localhost:8790
+}
+
+auth.{$PUBLIC_DOMAIN} {
+	reverse_proxy localhost:8190
+}
+
+mail.{$PUBLIC_DOMAIN} {
+	reverse_proxy localhost:8801
+}
+
+drive.{$PUBLIC_DOMAIN} {
+	reverse_proxy localhost:8802
+}
+
+books.{$PUBLIC_DOMAIN} {
+	reverse_proxy localhost:8803
+}

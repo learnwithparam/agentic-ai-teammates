@@ -36,6 +36,7 @@ Every lesson runs on `main` with the stack up. You read the files and run the re
 | 08 | [Follow up on time and remember what people decided](./docs/learner/08-remember-and-follow-up.md) |
 | 09 | [Publish the morning news](./docs/learner/09-publish-the-morning-news.md) |
 | 10 | [Send safely, then score the teammate](./docs/learner/10-send-safely-and-score.md) |
+| 11 | [Deploy the teammates to a server](./docs/learner/11-deploy-for-real.md) |
 
 ## Start
 
@@ -102,7 +103,7 @@ npm run web
 - **The worker** wakes on each new inbox event and runs the teammate. It holds no key.
 - **The scheduler** turns timers into inbox events. A reminder fires when an approval waits a day. A summary goes out at six on working evenings.
 - **The dispatcher** sends what the outbox holds. It spaces out sends and retries the ones that can work later.
-- **The web process** (http://localhost:8787) takes the apps' signed notices and serves the board.
+- **The web process** (http://localhost:8790) takes the apps' signed notices and serves the board.
 
 ## Send Bramble some invoices
 

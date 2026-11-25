@@ -33,7 +33,7 @@ services:
     image: quay.io/keycloak/keycloak:26.8.2
     # Production mode (start, not start-dev): strict hostname, real database, no dev defaults.
     # Plain HTTP is allowed only because it listens on 127.0.0.1; behind a proxy, TLS ends there.
-    command: ["start", "--http-enabled=true", "--hostname=http://localhost:8190", "--health-enabled=true"]
+    command: ["start", "--http-enabled=true", "--hostname=${KEYCLOAK_HOSTNAME:-http://localhost:8190}", "--health-enabled=true"]
     restart: unless-stopped
     depends_on:
       postgres:

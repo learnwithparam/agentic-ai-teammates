@@ -68,7 +68,7 @@ test("the session cookie is read by its exact name", () => {
 });
 
 test("after sign-in a person only ever lands on a page of this app", () => {
-  const app = "http://localhost:3333";
+  const app = "http://localhost:8790";
   assert.equal(samePagePath("/board?teammate=invoice#run", app), "/board?teammate=invoice#run");
   for (const outside of ["//evil.example", "/\\evil.example", "/\\/evil.example", "https://evil.example", "/\tevil", undefined, 42]) {
     assert.equal(samePagePath(outside, app), "/", String(outside));

@@ -16,7 +16,7 @@ test("an empty value counts as missing", () => {
 
 test("requireSettings lists every missing setting at once", () => {
   assert.throws(
-    () => requireSettings(["DATABASE_URL", "OPENROUTER_API_KEY", "APP_URL"], { APP_URL: "http://localhost:3333" }),
+    () => requireSettings(["DATABASE_URL", "OPENROUTER_API_KEY", "APP_URL"], { APP_URL: "http://localhost:8790" }),
     (error: unknown) => error instanceof MissingSettings && error.missing.join() === "DATABASE_URL,OPENROUTER_API_KEY",
   );
 });

@@ -24,7 +24,7 @@ export type AuthSettings = {
   issuer: string;
   clientId: string;
   clientSecret: string;
-  // The address people open, such as http://localhost:3333.
+  // The address people open, such as http://localhost:8790.
   appUrl: string;
   // Where the sign-in routes are mounted, such as /api/auth.
   mountPath: string;
