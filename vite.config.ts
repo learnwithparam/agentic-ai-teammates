@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 
 // One build, one entry per page. Each app serves dist/client/<page>/index.html, and they share
 // dist/client/assets, so a component used by two pages is downloaded once.
-const PAGES = ["mission-control"];
+const PAGES = ["mission-control", "lmail", "ldrive", "quirkbooks"];
 const pages = path.resolve(import.meta.dirname, "src/client/pages");
 
 export default defineConfig({

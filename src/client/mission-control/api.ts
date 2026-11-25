@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createHttp } from "@/lib/http";
 
 // What Mission Control's server answers, read with the same shapes the server test checks
 // (src/server/web-app.test.ts parses a real answer with these). A change on one side fails there.
@@ -194,51 +195,6 @@ export type AuditEntry = z.infer<typeof Audit>["entries"][number];
 
 export const Instructions = z.object({ text: z.string() });
 
-// The server's own words for a refusal, such as "This amount is above what you can approve."
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
-
-function signIn() {
-  const back = window.location.pathname + window.location.search;
-  window.location.assign(`/api/auth/login?returnTo=${encodeURIComponent(back)}`);
-}
-
-async function send(path: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}) },
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (response.status === 401) {
-    signIn();
-    throw new ApiError("Signing you in again.", 401);
-  }
-  const body = response.headers.get("content-type")?.includes("json") ? await response.json() : null;
-  if (!response.ok) throw new ApiError(body?.error ?? `The server answered ${response.status}.`, response.status);
-  return body;
-}
-
-// An answer in a shape the page does not expect is logged for the developer. The person sees a
-// plain sentence, never the parser's report.
-export async function get<T>(path: string, shape: z.ZodType<T>): Promise<T> {
-  const answer = shape.safeParse(await send(path));
-  if (answer.success) return answer.data;
-  console.error(`${path} answered in an unexpected shape`, answer.error.issues);
-  throw new ApiError("Mission Control got an answer it cannot read. Reload the page, and if it stays, tell your admin.", 200);
-}
-
-export function post(path: string, body: unknown, method = "POST") {
-  return send(path, { method, body: JSON.stringify(body) });
-}
-
-// Ends this session, then Keycloak's, so the next visit asks for a password again.
-export async function signOut() {
-  const { redirect } = z.object({ redirect: z.string() }).parse(await send("/api/auth/logout", { method: "POST" }));
-  window.location.assign(redirect);
-}
+// Mission Control mounts sign-in at /api/auth. The calls themselves are shared with every page.
+export { ApiError } from "@/lib/http";
+export const { get, post, signOut } = createHttp("/api/auth");
