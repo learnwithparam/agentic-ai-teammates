@@ -5,7 +5,7 @@
 // Used means reachable. Every tracked text file outside the watched folders is a root. A watched
 // file becomes used when a used file of the right kind names it as a whole path token.
 // The kinds are listed here.
-//   data/          read by code (.ts, .tsx, package.json).
+//   data/          read by code (.ts, .tsx, package.json), by path or by name without its extension.
 //   scripts/       called by code, package.json, a workflow or a shell script.
 // Comments in code do not count. An npm script is used when a doc shows `npm run <name>` as code,
 // or another npm script calls it.
@@ -62,6 +62,8 @@ function unusedFiles(files: Map<string, string>, bodies: Map<string, string>, tr
   const tokensFor = (path: string) => {
     const tokens = [path, basename(path)];
     if (path.endsWith(".ts")) tokens.push(`./${basename(path, ".ts")}`, path.slice(0, -3));
+    // A generated data file is named by its case id, such as "01-northwind-paper" in cases.ts.
+    if (path.startsWith("data/")) tokens.push(posix.parse(path).name);
     return tokens;
   };
   for (let grew = true; grew; ) {

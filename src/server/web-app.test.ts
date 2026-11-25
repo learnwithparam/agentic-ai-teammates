@@ -27,6 +27,8 @@ let base: string;
 let server: ReturnType<Express["listen"]>;
 let signedIn: Person | null = null;
 let allow = true;
+// Relations this test says no to, while every other question gets the answer in allow.
+const refused = new Set<string>();
 const asked: { relation: string; object: string; context?: Record<string, number> }[] = [];
 
 const requirePerson: RequestHandler = (request, response, next) => {
@@ -40,7 +42,7 @@ const requirePerson: RequestHandler = (request, response, next) => {
 
 const check: Check = async (_person, relation, object, context) => {
   asked.push({ relation, object: `${object.type}:${object.id}`, context });
-  return allow;
+  return allow && !refused.has(relation);
 };
 
 before(async () => {
@@ -57,6 +59,7 @@ after(async () => {
 beforeEach(() => {
   signedIn = null;
   allow = true;
+  refused.clear();
   asked.length = 0;
 });
 
@@ -140,12 +143,12 @@ test("an LDrive notice for a channel Mission Control does not hold is refused", 
   assert.equal(right.status, 202);
 });
 
-async function pendingApproval(amount: number) {
+async function pendingApproval(amount: number, currency = "EUR") {
   const runId = randomUUID();
   await pool.query("INSERT INTO runs (id, company, teammate) VALUES ($1, 'bramble', 'invoices')", [runId]);
   return new Approvals(pool).request({
     company: "bramble", teammate: "invoices", runId, threadId: `invoice:test:${runId}`, tool: "books.post_bill",
-    args: { amount }, amount, currency: "EUR", title: "Post a bill", brief: "The PO is over tolerance.", reasons: ["po_over_tolerance"], canAllowAlways: false,
+    args: { amount }, amount, currency, title: "Post a bill", brief: "The PO is over tolerance.", reasons: ["po_over_tolerance"], canAllowAlways: false,
   });
 }
 
@@ -172,6 +175,29 @@ test("an allowed decision is recorded, audited and wakes the teammate", async ()
   assert.deepEqual(events.rows, [{ type: "approval.decided" }]);
   const audit = await pool.query("SELECT actor, action FROM audit_log WHERE subject = $1", [approval.id]);
   assert.deepEqual(audit.rows, [{ actor: RAVI.email, action: "approval.approved" }]);
+});
+
+test("an approver cannot turn a decision into a standing rule", async () => {
+  const approval = await pendingApproval(300);
+  signedIn = RAVI;
+  refused.add("can_configure");
+  const response = await call(`/api/approvals/${approval.id}/decide`, { method: "POST", body: { approve: true, allowAlways: true } });
+  assert.equal(response.status, 403);
+  const { rows } = await pool.query("SELECT status FROM approvals WHERE id = $1", [approval.id]);
+  assert.equal(rows[0].status, "pending");
+});
+
+test("an amount in another currency is an admin's decision, whatever the approver's limit", async () => {
+  const approval = await pendingApproval(300, "GBP");
+  signedIn = RAVI;
+  refused.add("can_configure");
+  const response = await call(`/api/approvals/${approval.id}/decide`, { method: "POST", body: { approve: true } });
+  assert.equal(response.status, 403);
+  assert.deepEqual(asked.map((question) => question.relation), ["can_configure"]);
+  signedIn = ADA;
+  refused.clear();
+  const decided = await call(`/api/approvals/${approval.id}/decide`, { method: "POST", body: { approve: true } });
+  assert.equal(decided.status, 200);
 });
 
 test("changing a teammate needs can_configure, and a refusal changes nothing", async () => {

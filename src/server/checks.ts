@@ -24,7 +24,8 @@ export type Invoice = z.infer<typeof Invoice>;
 // What QuirkBooks knows, fetched by the gateway with its own key.
 export type Vendor = { id: string; name: string; email: string; iban: string; currency: string; requiresPo: boolean };
 export type PurchaseOrder = { number: string; vendorId: string; amount: number; currency: string; status: "open" | "closed" };
-export type BookFacts = { vendor: Vendor | null; po: PurchaseOrder | null; duplicateBillId: string | null };
+// The sender is the address the mail really came from, or null for a file a person put in the drive.
+export type BookFacts = { vendor: Vendor | null; po: PurchaseOrder | null; duplicateBillId: string | null; sender: string | null };
 
 export type CheckRules = {
   // The company's books are kept in this currency.
@@ -38,6 +39,7 @@ export type CheckRules = {
 export const REASONS = {
   arithmetic: "The lines and tax do not add up to the total.",
   unknown_vendor: "QuirkBooks has no vendor with this name or email.",
+  sender_unknown: "The mail did not come from the address QuirkBooks has for this vendor.",
   bank_changed: "The bank account on the invoice is not the one QuirkBooks has for this vendor.",
   duplicate: "QuirkBooks already has a bill with this invoice number from this vendor.",
   po_missing: "This vendor needs a purchase order, and the invoice names none that QuirkBooks has.",
@@ -47,6 +49,9 @@ export const REASONS = {
   over_limit: "The total is above what may post without a person.",
 } as const;
 export type Reason = keyof typeof REASONS;
+
+// How far over its purchase order an invoice may go before a person looks.
+export const PO_TOLERANCE = 0.05;
 
 const CENT = 0.005;
 
@@ -63,6 +68,7 @@ export function checkInvoice(invoice: Invoice, facts: BookFacts, rules: CheckRul
   const { vendor, po } = facts;
   if (!vendor) reasons.push("unknown_vendor");
   if (vendor && invoice.iban && !sameAccount(invoice.iban, vendor.iban)) reasons.push("bank_changed");
+  if (vendor && facts.sender && facts.sender.trim().toLowerCase() !== vendor.email.trim().toLowerCase()) reasons.push("sender_unknown");
   if (facts.duplicateBillId) reasons.push("duplicate");
   if (vendor?.requiresPo && !po) reasons.push("po_missing");
   if (po && (po.vendorId !== vendor?.id || po.status !== "open")) reasons.push("po_mismatch");

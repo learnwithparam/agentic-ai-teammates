@@ -82,6 +82,19 @@ npm run web
 - **The worker** wakes on each new inbox event and runs the teammate. It holds no key.
 - **The web process** (http://localhost:8787) takes the apps' signed notices and serves the board.
 
+## Send Bramble some invoices
+
+`data/invoices` holds 15 invoices from Bramble's vendors. Some are clean and some fail a check. One tries to instruct the teammate. [docs/coverage.md](docs/coverage.md) lists what each one proves.
+
+```bash
+npm run invoices:send
+npm run invoices:send -- 05-lumen-maths-error
+```
+
+With no case named, it sends them all. Mail cases go by SMTP to ap@bramble.example. The rest go to LDrive's Invoices folder. Watch the board. Clean invoices post to QuirkBooks by themselves, and the rest wait for you.
+
+After changing `data/invoices/cases.ts`, write the files again with `npm run invoices:make`.
+
 ## Check your work
 
 ```bash

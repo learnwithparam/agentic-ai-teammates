@@ -7,7 +7,7 @@ import { ServiceError } from "./adapters/http";
 import type { Accounting, FileSource, MailSource } from "./adapters/types";
 import { Approvals } from "./approvals";
 import { parseJsonText, payloadHash } from "./canonical";
-import { checkInvoice, type Invoice, type Reason, REASONS } from "./checks";
+import { checkInvoice, type Invoice, type Reason, REASONS, PO_TOLERANCE } from "./checks";
 import { GitHubError, type GitHubPublisher } from "./github";
 import type { CallModel, ChatMessage, ToolSpec } from "./llm";
 import type { Tier } from "./models";
@@ -34,9 +34,6 @@ export type GatewayDeps = {
   publisher: GitHubPublisher | null;
   tokens: { worker: string; dispatcher: string };
 };
-
-// How far over its purchase order an invoice may go before a person looks.
-export const PO_TOLERANCE = 0.05;
 
 const RunScope = z.object({
   runId: z.uuid(),
@@ -243,10 +240,11 @@ export function createGatewayApp(deps: GatewayDeps): Express {
   // ---------- books.post_bill: the gateway runs the checks itself ----------
 
   async function bookFacts(invoice: Invoice, source: InvoiceSource) {
-    const vendor = await books.findVendor(invoice.vendorName, invoice.vendorEmail ?? source.sender);
+    // The real sender comes first: an address printed on the invoice proves nothing.
+    const vendor = await books.findVendor(invoice.vendorName, source.sender ?? invoice.vendorEmail);
     const purchaseOrder = invoice.poNumber ? await books.purchaseOrder(invoice.poNumber) : null;
     const duplicates = vendor ? await books.bills(vendor.id, invoice.invoiceNumber) : [];
-    return { vendor, po: purchaseOrder, duplicateBillId: duplicates[0]?.id ?? null };
+    return { vendor, po: purchaseOrder, duplicateBillId: duplicates[0]?.id ?? null, sender: source.sender };
   }
 
   async function postBill(args: ToolArgs<"books.post_bill">, facts: Awaited<ReturnType<typeof bookFacts>>, postedBecause: string): Promise<ToolResult> {

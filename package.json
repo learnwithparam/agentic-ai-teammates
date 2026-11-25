@@ -13,8 +13,10 @@
     "gateway": "tsx src/server/gateway.ts",
     "worker": "tsx src/server/worker.ts",
     "web": "tsx src/server/web.ts",
+    "invoices:make": "tsx data/invoices/make.ts",
+    "invoices:send": "tsx data/invoices/send.ts",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' 'apps/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md && tsx scripts/check-repo.ts"
+    "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' 'apps/**/*.test.ts' 'data/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md docs/coverage.md && tsx scripts/check-repo.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1177.0",

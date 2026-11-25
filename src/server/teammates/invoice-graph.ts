@@ -1,8 +1,7 @@
 import { Annotation, type BaseCheckpointSaver, END, interrupt, START, StateGraph } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { z } from "zod";
-import { type BookFacts, checkInvoice, Invoice, type PurchaseOrder, REASONS, type Reason, type Vendor } from "../checks";
-import { PO_TOLERANCE } from "../gateway-app";
+import { type BookFacts, checkInvoice, Invoice, PO_TOLERANCE, type PurchaseOrder, REASONS, type Reason, type Vendor } from "../checks";
 import { modelSchema } from "../model-schema";
 import { COMPANIES } from "../people";
 import type { Run, StopReason } from "../run";
@@ -147,7 +146,7 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
     const run = runOf(config);
     const threadId = threadOf(config);
     const invoice = state.invoice!;
-    const vendorResult = await run.tool(threadId, "books.find_vendor", { name: invoice.vendorName, email: invoice.vendorEmail ?? state.source.sender });
+    const vendorResult = await run.tool(threadId, "books.find_vendor", { name: invoice.vendorName, email: state.source.sender ?? invoice.vendorEmail });
     const vendor = done(vendorResult, VendorFound).vendor;
     const poResult = invoice.poNumber ? await run.tool(threadId, "books.purchase_order", { number: invoice.poNumber }) : null;
     const purchaseOrder = poResult ? done(poResult, PurchaseOrderFound).purchaseOrder : null;
@@ -157,7 +156,7 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
       const bills = done(billsResult, VendorBills).bills;
       duplicateBillId = bills.find((bill) => bill.invoiceNumber.toLowerCase() === invoice.invoiceNumber.toLowerCase())?.id ?? null;
     }
-    return { facts: { vendor, po: purchaseOrder, duplicateBillId } };
+    return { facts: { vendor, po: purchaseOrder, duplicateBillId, sender: state.source.sender } };
   }
 
   // The same checks the gateway runs before it posts. Running them here lets the teammate

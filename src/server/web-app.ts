@@ -7,6 +7,7 @@ import type { Person } from "./auth";
 import { createHooksRouter } from "./hooks";
 import { Inbox } from "./inbox";
 import { Outbox } from "./outbox";
+import { COMPANIES } from "./people";
 import type { Check } from "./permissions";
 import { rules, setRule } from "./policy";
 import { spendByDay } from "./spend";
@@ -143,8 +144,13 @@ export function createWebApp(deps: WebDeps): Express {
     const body = Decide.parse(request.body);
     const approval = await approvals.get(who.company, id);
     if (!approval) throw new HttpError(404, "There is no such approval.");
+    // An approver's limit is in the company's currency, so an amount in another currency is an admin's call.
+    const foreign = approval.currency !== null && approval.currency !== COMPANIES[who.company].currency;
+    if (foreign) await requireTeammate(who, approval.teammate, "can_configure");
     const allowed = await check(who, "can_decide", { type: "approval", id, company: approval.company }, { amount: approval.amount ?? 0 });
     if (!allowed) throw new HttpError(403, "This amount is above what you can approve. Ask an admin.");
+    // Allow always writes a standing rule, which is a change to the teammate.
+    if (body.allowAlways) await requireTeammate(who, approval.teammate, "can_configure");
     const decided = await approvals.decide({ company: who.company, id, person: who, approve: body.approve, allowAlways: body.allowAlways, note: body.note });
     response.json(publicApproval(decided));
   });

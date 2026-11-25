@@ -1,0 +1,14 @@
+Hello Bramble team,
+
+Here is our invoice PF-9120, dated 2026-11-01. Payment is due by 2026-12-01.
+
+  Design suite licence, November: EUR 490.00
+  Net: EUR 490.00
+  VAT: EUR 98.00
+  Total due: EUR 588.00
+
+Please pay to IBAN NL91ABNA0417164300, reference PF-9120.
+
+Thank you,
+Pixelforge Software
+accounts@pixelforge.example

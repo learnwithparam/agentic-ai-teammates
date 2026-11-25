@@ -25,6 +25,7 @@ const facts: BookFacts = {
   vendor: { id: "V-001", name: "Northwind Paper Co.", email: "billing@northwind.example", iban: "DE89370400440532013000", currency: "EUR", requiresPo: true },
   po: { number: "PO-1042", vendorId: "V-001", amount: 1000, currency: "EUR", status: "open" },
   duplicateBillId: null,
+  sender: "Billing@Northwind.example",
 };
 
 function only(invoice: Invoice, bookFacts: BookFacts): Reason[] {
@@ -38,7 +39,8 @@ test("a clean invoice passes every check, with the account compared without spac
 // One case per reason, each changing a single fact of the clean invoice.
 const cases: Record<Reason, [Invoice, BookFacts]> = {
   arithmetic: [{ ...clean, total: 962 }, { ...facts, po: { ...facts.po!, amount: 1200 } }],
-  unknown_vendor: [{ ...clean, poNumber: null }, { vendor: null, po: null, duplicateBillId: null }],
+  unknown_vendor: [{ ...clean, poNumber: null }, { ...facts, vendor: null, po: null }],
+  sender_unknown: [clean, { ...facts, sender: "billing@northwind-payments.example" }],
   bank_changed: [{ ...clean, iban: "GB33 BUKB 2020 1555 5555 55" }, facts],
   duplicate: [clean, { ...facts, duplicateBillId: "bill-7" }],
   po_missing: [{ ...clean, poNumber: null }, { ...facts, po: null }],
@@ -65,4 +67,8 @@ test("five percent over the purchase order still passes, a cent more does not", 
   const atEdge = { ...facts, po: { ...facts.po!, amount: 952 / 1.05 } };
   assert.deepEqual(only(clean, atEdge), []);
   assert.deepEqual(only({ ...clean, lines: [{ description: "Paper", amount: 800.02 }], total: 952.02 }, atEdge), ["po_over_tolerance"]);
+});
+
+test("a file from the drive has no sender, so only mail is held to the vendor's address", () => {
+  assert.deepEqual(only(clean, { ...facts, sender: null }), []);
 });
