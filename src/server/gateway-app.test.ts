@@ -391,3 +391,38 @@ test("every teammate is refused every tool its definition does not list, and the
     assert.equal(rows[0].n, refused.length);
   }
 });
+
+test("a follow-up is refused in the past, past 14 days, or to a person who never wrote, and stops at 20 open", async () => {
+  const runId = await startRun("invoices");
+  const scope = { runId, company: "bramble", teammate: "invoices", threadId: "follow-up" };
+  const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+  const ask = (args: Record<string, unknown>) => callTool("team.follow_up", { ...scope, args: { about: "Lumen's reply", reason: "Ravi asked.", ...args } });
+  assert.match((await ask({ at: inDays(-1) })).reason, /in the future/);
+  assert.match((await ask({ at: inDays(15) })).reason, /at most 14 days/);
+  assert.match((await ask({ at: inDays(2), person: "stranger@bramble.example" })).reason, /has written to this teammate/);
+  const set = await ask({ at: inDays(3) });
+  assert.equal(set.status, "done");
+  const timer = await pool.query("SELECT payload, status FROM timers WHERE company = 'bramble' AND teammate = 'invoices' AND name = $1", [set.result.followUp]);
+  assert.equal(timer.rows[0].status, "waiting");
+  assert.equal(timer.rows[0].payload.about, "Lumen's reply");
+  await pool.query("DELETE FROM timers WHERE teammate = 'invoices' AND name LIKE 'follow:%'");
+  for (let count = 0; count < 20; count += 1) assert.equal((await ask({ at: inDays(1) })).status, "done");
+  assert.match((await ask({ at: inDays(1) })).reason, /already has 20 follow-ups waiting/);
+  await pool.query("DELETE FROM timers WHERE teammate = 'invoices' AND name LIKE 'follow:%'");
+});
+
+test("a model is offered a small write only for a teammate whose chat acts", async () => {
+  const offer = async (teammate: string, tools: string[]) => {
+    const runId = await startRun(teammate);
+    const response = await fetch(`${base}/model`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${WORKER}` },
+      body: JSON.stringify({ runId, company: "bramble", teammate, threadId: "offer", task: "answer", risk: "low", prior: [], maxTokens: 64, messages: [{ role: "user", content: "Hi" }], tools }),
+    });
+    await response.body?.cancel();
+    return response.status;
+  };
+  assert.equal(await offer("news", ["team.follow_up"]), 403);
+  assert.equal(await offer("invoices", ["books.post_bill"]), 422);
+  assert.equal(await offer("invoices", ["memory.report"]), 422);
+});

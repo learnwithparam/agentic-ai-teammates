@@ -11,5 +11,7 @@ export const news = defineTeammate({
   schedules: [{ name: EDITION_TIMER, cron: "0 7 * * 1-5" }, DIGEST],
   listens: [],
   defaults: { dailyBudgetUsd: 0.5 },
+  // It answers questions about the day's news, and never sets work for itself.
+  capabilities: { chat: { mode: "read", reads: ["news.read"] }, followUps: false, digest: true },
   work: newsTeammate,
 });

@@ -21,7 +21,7 @@ import { COMPANIES } from "./people";
 import { decisionFor } from "./policy";
 import { FAST_TASKS, type Outcome, route, ROUTING_MODES, STRONG_TASKS, type Task } from "./router";
 import { budgetLeft, recordSpend } from "./spend";
-import { allowedTools } from "./teammates/registry";
+import { allowedTools, teammateKind } from "./teammates/registry";
 import { type Card, isToolName, modelToolSpec, type ToolContext, toolDefinition, type ToolName, type ToolResult } from "./tools";
 
 // The gateway: the permissions primitive. It holds every credential (the OpenRouter key and the
@@ -254,8 +254,12 @@ export function createGatewayApp(deps: GatewayDeps): Express {
     const body = ModelBody.parse(request.body);
     const teammate = await requireRun(body);
     const tools = (body.tools ?? []).map((name) => {
-      if (!isToolName(name) || !toolDefinition(name).readOnly) throw new HttpError(422, `${name} cannot be offered to a model.`);
+      if (!isToolName(name)) throw new HttpError(422, `${name} cannot be offered to a model.`);
       if (!allowedTools(teammate.kind).has(name)) throw new HttpError(403, `${name} is not one of the ${teammate.kind} teammate's tools.`);
+      // A model reads. It may also make the small writes marked modelMayCall, but only for a teammate whose chat acts.
+      const tool = toolDefinition(name);
+      const acts = teammateKind(teammate.kind)?.capabilities.chat.mode === "act";
+      if (!tool.readOnly && !(tool.modelMayCall && acts)) throw new HttpError(422, `${name} cannot be offered to a model.`);
       return modelToolSpec(name);
     });
     const result = await routedCall(body, { ...body, messages: body.messages as ChatMessage[], tools: tools.length ? tools : undefined });

@@ -19,11 +19,21 @@ export const invoice = defineTeammate({
     "books.post_bill",
     "memory.read",
     "memory.record_decision",
+    "memory.note",
+    "memory.progress",
+    "memory.report",
     "team.remind",
     "team.digest",
+    "team.follow_up",
   ],
   schedules: [DIGEST],
   listens: ["mail", "drive"],
   defaults: { dailyBudgetUsd: 1 },
+  capabilities: {
+    // A person may ask it to look at something later, so chat may set follow-ups.
+    chat: { mode: "act", reads: ["books.find_vendor", "books.purchase_order", "books.vendor_bills", "mail.history", "mail.message"] },
+    followUps: true,
+    digest: true,
+  },
   work: invoiceTeammate,
 });

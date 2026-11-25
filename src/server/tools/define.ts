@@ -51,8 +51,12 @@ export type ToolDefinition<Args extends z.ZodType = z.ZodType, State = unknown> 
   description: string;
   args: Args;
   decision: Decision;
-  // A read-only tool may be offered to a model in an open-ended loop. A writing tool never is.
+  // A read-only tool may be offered to a model in an open-ended loop.
   readOnly: boolean;
+  // A small write that stays inside the company, such as a follow-up or a progress line. A model
+  // may call it in chat, and it still runs through every step of callTool. Every other write is
+  // never offered to a model.
+  modelMayCall?: boolean;
   // What the quick model reads to judge one call. A tool without them is never judged: a person decides.
   judgeRules?: string;
   // The reason a person sees when a standing rule asks them to approve every call.

@@ -4,6 +4,7 @@ import { ensureTeammates } from "./teammates/ensure";
 import { requireSettings, setting } from "./env";
 import { GatewayClient } from "./gateway-client";
 import { Inbox, listenForEvents } from "./inbox";
+import { teammateWork } from "./teammates/core";
 import { TEAMMATES } from "./teammates/registry";
 import { startTracing } from "./tracing";
 import { workOnce } from "./worker-loop";
@@ -27,7 +28,7 @@ const options = {
   pool,
   gateway: new GatewayClient(setting("GATEWAY_URL"), setting("GATEWAY_WORKER_TOKEN")),
   inbox: new Inbox(pool),
-  kinds: Object.fromEntries(TEAMMATES.map((teammate) => [teammate.kind, teammate.work(checkpointer)])),
+  kinds: Object.fromEntries(TEAMMATES.map((teammate) => [teammate.kind, teammateWork(teammate, checkpointer)])),
 };
 
 let stopping = false;

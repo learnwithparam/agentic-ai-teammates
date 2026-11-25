@@ -29,7 +29,7 @@ export function toolDefinition(name: ToolName): ToolDefinition {
 // The tool as a model sees it in an open-ended loop. Dots are not allowed in a function name.
 export function modelToolSpec(name: ToolName) {
   const tool = toolDefinition(name);
-  if (!tool.readOnly) throw new Error(`${name} writes, so it is never offered to a model.`);
+  if (!tool.readOnly && !tool.modelMayCall) throw new Error(`${name} writes, so it is never offered to a model.`);
   return {
     type: "function" as const,
     function: { name: name.replace(".", "__"), description: tool.description, parameters: z.toJSONSchema(tool.args) as Record<string, unknown> },

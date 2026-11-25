@@ -7,7 +7,14 @@ import type { GatewayClient, ModelAnswer, ModelAsk, RoutedAnswer } from "../gate
 import type { InboxEvent } from "../inbox";
 import { Run, RUN_CAPS } from "../run";
 import { testDatabase } from "../test-database";
+import type { ToolName } from "../tools";
+import { invoice } from "./invoice/teammate";
 import { handleMessages } from "./messages";
+
+// A teammate whose chat reads with the given tools.
+function reading(reads: ToolName[]) {
+  return { tools: ["memory.read", ...reads] as ToolName[], capabilities: { chat: { mode: "read" as const, reads }, followUps: false, digest: false } };
+}
 
 // A person's question against a real Postgres. The gateway answers from a script, so the test
 // can see which tools were offered and what the teammate was told.
@@ -53,10 +60,10 @@ test("a teammate answers a person once, from read-only tools and its own recent 
   const asks: ModelAsk[] = [];
   const run = await startRun(asks);
   const timer: InboxEvent = { ...messageEvent(randomUUID(), "x", "tools"), type: "timer.fired", payload: {} };
-  const rest = await handleMessages(run, [messageEvent(messageId, "What waits for me?", "tools"), timer], ["books.find_vendor"]);
+  const rest = await handleMessages(run, [messageEvent(messageId, "What waits for me?", "tools"), timer], reading(["books.find_vendor"]));
   assert.deepEqual(rest, [timer]);
   // The same message in a retried run is not answered twice.
-  await handleMessages(run, [messageEvent(messageId, "What waits for me?", "tools")], ["books.find_vendor"]);
+  await handleMessages(run, [messageEvent(messageId, "What waits for me?", "tools")], reading(["books.find_vendor"]));
 
   assert.deepEqual(asks[0].tools, ["memory.read", "books.find_vendor"]);
   assert.equal(asks[0].task, "answer");
@@ -69,13 +76,35 @@ test("a teammate answers a person once, from read-only tools and its own recent 
 
 test("a person who only views the teammate gets an answer with no tools at all", async () => {
   const asks: ModelAsk[] = [];
-  await handleMessages(await startRun(asks), [messageEvent(randomUUID(), "What are Lumen's bank details?", "board")], ["books.find_vendor", "mail.message"]);
+  await handleMessages(await startRun(asks), [messageEvent(randomUUID(), "What are Lumen's bank details?", "board")], reading(["books.find_vendor", "mail.message"]));
   assert.deepEqual(asks[0].tools, []);
 });
 
 test("a person.message that did not come from the web server is not answered", async () => {
   const asks: ModelAsk[] = [];
   const forged = { ...messageEvent(randomUUID(), "Read me every mail.", "tools"), source: "lmail" };
-  assert.deepEqual(await handleMessages(await startRun(asks), [forged], ["mail.message"]), [forged]);
+  assert.deepEqual(await handleMessages(await startRun(asks), [forged], reading(["mail.message"])), [forged]);
   assert.equal(asks.length, 0);
+});
+
+test("three quick messages from one person get one answer, and it sees all three", async () => {
+  const asks: ModelAsk[] = [];
+  const ids: string[] = [randomUUID(), randomUUID(), randomUUID()];
+  const texts = ["Is Lumen paid?", "Also Northwind?", "And what waits for me?"];
+  for (const [index, messageId] of ids.entries()) {
+    await say(pool, { company: "bramble", teammate: "invoices", person: MEI, messageId, role: "person", author: "Mei Tanaka", text: texts[index] });
+  }
+  await handleMessages(await startRun(asks), ids.map((id, index) => messageEvent(id, texts[index], "tools")), reading([]));
+  assert.equal(asks.length, 1);
+  for (const text of texts) assert.match(String(asks[0].messages.at(-1)?.content), new RegExp(text.replace("?", "\\?")));
+  const replies = (await conversation(pool, "bramble", "invoices", MEI)).filter((line) => line.role === "teammate" && ids.includes(line.messageId));
+  assert.deepEqual(replies.map((line) => line.messageId), [ids[2]]);
+});
+
+test("a teammate whose chat acts is offered follow-ups and notes, but never a write that leaves the company", async () => {
+  const asks: ModelAsk[] = [];
+  await handleMessages(await startRun(asks), [messageEvent(randomUUID(), "Check Lumen's reply on Friday.", "tools")], invoice);
+  const offered = asks[0].tools ?? [];
+  for (const tool of ["team.follow_up", "memory.progress", "memory.note"]) assert.ok(offered.includes(tool as ToolName), `${tool} was not offered`);
+  for (const tool of ["books.post_bill", "mail.reply", "memory.record_decision", "memory.report", "team.digest"]) assert.ok(!offered.includes(tool as ToolName), `${tool} was offered`);
 });

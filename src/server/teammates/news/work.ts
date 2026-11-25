@@ -4,11 +4,10 @@ import type { InboxEvent } from "../../inbox";
 import { COMPANIES } from "../../people";
 import { CapReached, type Run } from "../../run";
 import { type Decision, FRESH_STATE, newsGraph, type Result } from "./graph";
-import { handleMessages } from "../messages";
-import { companyDay, handleTimers } from "../timed";
+import { companyDay } from "../timed";
 
 // The news teammate. Its "edition" timer starts the day's graph, one thread per day, and an
-// approval decision resumes the day that asked. Its other timers are the shared ones.
+// approval decision resumes the day that asked. The core handles its chat and shared timers.
 
 export const EDITION_TIMER = "edition";
 
@@ -32,8 +31,9 @@ export function newsTeammate(checkpointer: BaseCheckpointSaver) {
   return async function work(run: Run, batch: InboxEvent[]) {
     runs.set(run.ref.runId, run);
     try {
+      // The core already handled chat and the shared timers, so the batch is editions and decisions.
       const editions = batch.filter((event) => event.type === "timer.fired" && Fired.parse(event.payload).name === EDITION_TIMER);
-      const events = await handleMessages(run, await handleTimers(run, batch.filter((event) => !editions.includes(event))), []);
+      const events = batch.filter((event) => !editions.includes(event));
       for (const item of plan(run, editions, events)) {
         try {
           const result = await runThread(run, item);

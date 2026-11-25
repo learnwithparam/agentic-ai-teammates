@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { InboxEvent } from "../inbox";
 import { COMPANIES } from "../people";
 import type { Run } from "../run";
+import { FOLLOW_UP_PREFIX } from "../tools/team";
 
 // What every teammate does when one of its timers fires. A reminder and a digest are the same for
 // each teammate, so the teammate's own graph only sees the events that are its real work.
@@ -14,22 +15,23 @@ export function companyDay(at: Date, timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
 }
 
-// Handles the timer events in a batch and returns the rest for the teammate's own work.
-export async function handleTimers(run: Run, events: InboxEvent[]): Promise<InboxEvent[]> {
+// Handles the shared timer events in a batch: reminders and the digest. The teammate's own
+// schedules and its follow-ups pass on with the rest.
+export async function handleTimers(run: Run, events: InboxEvent[], options: { own: ReadonlySet<string>; digest: boolean }): Promise<InboxEvent[]> {
   const rest: InboxEvent[] = [];
   for (const event of events) {
-    if (event.type !== "timer.fired") {
+    const fired = event.type === "timer.fired" ? Fired.parse(event.payload) : null;
+    if (!fired || options.own.has(fired.name) || fired.name.startsWith(FOLLOW_UP_PREFIX)) {
       rest.push(event);
       continue;
     }
-    const fired = Fired.parse(event.payload);
     const thread = `timer:${fired.name}`;
     if (fired.name.startsWith("remind:") && fired.approvalId) {
       const result = await run.tool(thread, "team.remind", { approvalId: fired.approvalId });
       if (result.status !== "done") run.outcome(thread, "handed_to_human", result.status === "denied" ? result.reason : "The reminder asked for an approval.");
       else if (Queued.parse(result.result).queued === 0) run.outcome(thread, "nothing_to_send", "The approval was decided before the reminder.");
       else run.outcome(thread, "sent", "Reminded the people who decide.");
-    } else if (fired.name === "digest") {
+    } else if (fired.name === "digest" && options.digest) {
       const day = companyDay(new Date(fired.firedFor), COMPANIES[run.ref.company].timezone);
       const result = await run.tool(thread, "team.digest", { day });
       run.outcome(thread, result.status === "done" ? "sent" : "handed_to_human", result.status === "denied" ? result.reason : `Sent the summary for ${day}.`);

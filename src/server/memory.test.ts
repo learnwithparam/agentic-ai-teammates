@@ -45,3 +45,22 @@ test("a vendor's note is named by its QuirkBooks id, never by what the invoice w
   assert.throws(() => vendorTopic("../V-001"), /is not a note name/);
   assert.throws(() => vendorTopic("Lumen Print House"), /is not a note name/);
 });
+
+test("a new note gets one line in the index, and a task's progress is its own file", async () => {
+  const own = { company: "bramble", teammate: "index-check" };
+  await memory.addLine(own, "vendor-v-001", "Lumen said the new bank is real.");
+  await memory.addLine(own, "vendor-v-001", "Ravi called them.");
+  await memory.addLine(own, "vendor-v-002", "Northwind pays late.");
+  assert.equal(await memory.read(own, "index.md"), "- notes/vendor-v-001.md\n- notes/vendor-v-002.md\n");
+  assert.deepEqual(await memory.addProgress(own, "lumen-bank-check", "Asked Lumen to confirm."), { added: true });
+  assert.equal(await memory.read(own, "progress/lumen-bank-check.md"), "- Asked Lumen to confirm.\n");
+  await assert.rejects(memory.read(own, "progress/../index.md"), /is not a memory file/);
+});
+
+test("a teammate never tells a person the same thing twice", async () => {
+  const own = { company: "bramble", teammate: "report-check" };
+  assert.deepEqual(await memory.report(own, "ravi@bramble.example", "Lumen has not replied."), { added: true });
+  assert.deepEqual(await memory.report(own, "ravi@bramble.example", "Lumen  has not replied."), { added: false });
+  // The same words to another person are a new report.
+  assert.deepEqual(await memory.report(own, "ada@bramble.example", "Lumen has not replied."), { added: true });
+});
