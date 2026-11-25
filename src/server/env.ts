@@ -32,6 +32,33 @@ const SETTINGS = {
   LANGFUSE_PUBLIC_KEY: "The Langfuse project's public key. npm run setup writes the local project's.",
   LANGFUSE_SECRET_KEY: "The Langfuse project's secret key. npm run setup writes the local project's.",
   LANGFUSE_BASE_URL: "The Langfuse address: http://localhost:3100 locally, or your Langfuse Cloud region.",
+  GATEWAY_URL: "Where the worker and dispatcher reach the gateway. npm run setup writes it.",
+  GATEWAY_PORT: "The port the gateway listens on. npm run setup writes it.",
+  GATEWAY_WORKER_TOKEN: "The worker's key to the gateway. npm run setup writes it.",
+  GATEWAY_DISPATCHER_TOKEN: "The dispatcher's key to the gateway. npm run setup writes it.",
+  LMAIL_URL: "LMail's API address. npm run setup writes it.",
+  LMAIL_PORT: "The port LMail's web and API listen on. npm run setup writes it.",
+  LMAIL_SMTP_PORT: "The port LMail receives mail on. npm run setup writes it.",
+  LMAIL_DATABASE_URL: "LMail's own Postgres. npm run setup writes it.",
+  LMAIL_API_KEY: "Mission Control's key to LMail. npm run setup writes it.",
+  LMAIL_WEBHOOK_SECRET: "Signs LMail's notices to Mission Control. npm run setup writes it.",
+  LMAIL_CLIENT_SECRET: "LMail's Keycloak client secret. npm run setup writes it.",
+  LMAIL_RELAY_URL: "Optional. An SMTP relay, such as smtp://user:pass@host:587, to send outside LMail's own domains.",
+  LDRIVE_URL: "LDrive's API address. npm run setup writes it.",
+  LDRIVE_PORT: "The port LDrive listens on. npm run setup writes it.",
+  LDRIVE_DATABASE_URL: "LDrive's own Postgres. npm run setup writes it.",
+  LDRIVE_API_KEY: "Mission Control's read-only key to LDrive. npm run setup writes it.",
+  LDRIVE_UPLOAD_KEY: "The workshop scripts' key for uploading to LDrive. npm run setup writes it.",
+  LDRIVE_WEBHOOK_SECRET: "Signs LDrive's change notices. npm run setup writes it.",
+  LDRIVE_CLIENT_SECRET: "LDrive's Keycloak client secret. npm run setup writes it.",
+  QUIRKBOOKS_URL: "QuirkBooks' API address. npm run setup writes it.",
+  QUIRKBOOKS_PORT: "The port QuirkBooks listens on. npm run setup writes it.",
+  QUIRKBOOKS_DATABASE_URL: "QuirkBooks' own Postgres. npm run setup writes it.",
+  QUIRKBOOKS_API_KEY: "Mission Control's key to QuirkBooks. npm run setup writes it.",
+  QUIRKBOOKS_CLIENT_SECRET: "QuirkBooks' Keycloak client secret. npm run setup writes it.",
+  GITHUB_TOKEN: "A fine-grained GitHub token with Contents read and write on NEWS_REPO only.",
+  NEWS_REPO: "The GitHub repository the news cards publish to, as owner/name: your fork of this repo.",
+  EXA_API_KEY: "Optional. An Exa key, from dashboard.exa.ai, turns on Exa as a news source.",
 } as const;
 
 export type Setting = keyof typeof SETTINGS;
@@ -46,6 +73,11 @@ export function setting(name: Setting, source: NodeJS.ProcessEnv = process.env):
   const value = source[name];
   if (!value) throw new MissingSettings([name]);
   return value;
+}
+
+// A setting that turns a feature on. Without it the feature is off and says so; nothing stands in.
+export function optionalSetting(name: Setting, source: NodeJS.ProcessEnv = process.env): string | undefined {
+  return source[name] || undefined;
 }
 
 // Call once when a process starts, with every setting it will read. It then fails at startup

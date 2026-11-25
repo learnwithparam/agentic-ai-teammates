@@ -7,8 +7,11 @@
     "setup": "tsx scripts/setup.ts",
     "infra:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d --wait",
     "langfuse:up": "docker compose -f langfuse/docker-compose.yml up -d --wait",
+    "lmail": "tsx apps/lmail/main.ts",
+    "ldrive": "tsx apps/ldrive/main.ts",
+    "quirkbooks": "tsx apps/quirkbooks/main.ts",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md && tsx scripts/check-repo.ts"
+    "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' 'apps/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md && tsx scripts/check-repo.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1177.0",

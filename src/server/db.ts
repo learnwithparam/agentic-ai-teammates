@@ -8,26 +8,31 @@ import pg from "pg";
 
 const MIGRATIONS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "migrations");
 
+// A date column comes back as the text Postgres stores, such as "2026-11-02". A Date at local
+// midnight would move a bill's date by a day in some time zones.
+pg.types.setTypeParser(pg.types.builtins.DATE, (value) => value);
+
 // searchPath puts every table in one schema. The tests use it so each test file has its own tables.
 export function createPool(connectionString: string, searchPath?: string): pg.Pool {
   return new pg.Pool({ connectionString, max: 10, options: searchPath ? `-c search_path=${searchPath}` : undefined });
 }
 
-export async function migrate(pool: pg.Pool): Promise<string[]> {
+// Each app passes its own folder of migrations; Mission Control's is the default.
+export async function migrate(pool: pg.Pool, folder = MIGRATIONS): Promise<string[]> {
   const client = await pool.connect();
   try {
     // One process at a time: a second one waits here instead of running the same file twice.
-    await client.query("SELECT pg_advisory_lock(hashtext('teammates_migrations'))");
+    await client.query("SELECT pg_advisory_lock(hashtext(current_database()))");
     await client.query("CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
     const { rows } = await client.query<{ name: string }>("SELECT name FROM schema_migrations");
     const done = new Set(rows.map((row) => row.name));
     const applied: string[] = [];
-    const files = readdirSync(MIGRATIONS).filter((file) => file.endsWith(".sql")).sort();
+    const files = readdirSync(folder).filter((file) => file.endsWith(".sql")).sort();
     for (const name of files) {
       if (done.has(name)) continue;
       await client.query("BEGIN");
       try {
-        await client.query(readFileSync(path.join(MIGRATIONS, name), "utf8"));
+        await client.query(readFileSync(path.join(folder, name), "utf8"));
         await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [name]);
         await client.query("COMMIT");
         applied.push(name);
@@ -38,7 +43,7 @@ export async function migrate(pool: pg.Pool): Promise<string[]> {
     }
     return applied;
   } finally {
-    await client.query("SELECT pg_advisory_unlock(hashtext('teammates_migrations'))").catch(() => {});
+    await client.query("SELECT pg_advisory_unlock(hashtext(current_database()))").catch(() => {});
     client.release();
   }
 }

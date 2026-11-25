@@ -51,6 +51,23 @@ To start the services again after a restart:
 npm run infra:up
 ```
 
+## The apps your teammates work in
+
+The teammates work in three real apps. Each one has its own database, its own sign-in and its own API.
+Start each in its own terminal:
+
+```bash
+npm run lmail
+npm run ldrive
+npm run quirkbooks
+```
+
+- **LMail** (http://localhost:8801) is the mail. It takes real mail on port 2525. Send it an invoice with a PDF from any mail program.
+- **LDrive** (http://localhost:8802) holds shared folders. Drop an invoice into Invoices and a teammate hears about it.
+- **QuirkBooks** (http://localhost:8803) keeps the books: vendors, purchase orders and bills.
+
+Mission Control reaches them only through their APIs, with keys that `npm run setup` writes.
+
 ## Check your work
 
 ```bash

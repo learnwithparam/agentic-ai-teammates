@@ -28,9 +28,18 @@ const FGA = "http://localhost:8290";
 const FGA_STORE_NAME = "mission-control";
 const APP_URL = "http://localhost:3333";
 
+// The three apps the teammates work in, each its own service with its own database and sign-in.
+const WORLD = [
+  { id: "lmail", prefix: "LMAIL", name: "LMail", port: 8801 },
+  { id: "ldrive", prefix: "LDRIVE", name: "LDrive", port: 8802 },
+  { id: "quirkbooks", prefix: "QUIRKBOOKS", name: "QuirkBooks", port: 8803 },
+] as const;
+
 // ---------- .env: generate what is missing, keep what is there ----------
 
 const secret = () => randomBytes(24).toString("base64url");
+// Standard Webhooks secrets are "whsec_" and base64 of the key bytes.
+const webhookSecret = () => `whsec_${randomBytes(32).toString("base64")}`;
 
 function setEnv(values: Record<string, string>, file = envFile) {
   const lines = existsSync(file) ? readFileSync(file, "utf8").split("\n") : [];
@@ -102,6 +111,21 @@ function ensureSettings(): Record<string, string> {
   want("FGA_API_URL", () => FGA);
   want("S3_ENDPOINT", () => "http://localhost:9100");
   want("S3_REGION", () => "us-east-1");
+  want("GATEWAY_PORT", () => "8788");
+  want("GATEWAY_URL", () => "http://localhost:8788");
+  for (const name of ["GATEWAY_WORKER_TOKEN", "GATEWAY_DISPATCHER_TOKEN"]) want(name, secret);
+  for (const app of WORLD) {
+    const password = want(`${app.prefix}_DB_PASSWORD`, secret);
+    want(`${app.prefix}_DATABASE_URL`, () => `postgresql://${app.id}:${password}@localhost:5452/${app.id}`);
+    want(`${app.prefix}_URL`, () => `http://localhost:${app.port}`);
+    want(`${app.prefix}_PORT`, () => String(app.port));
+    want(`${app.prefix}_CLIENT_SECRET`, secret);
+    want(`${app.prefix}_API_KEY`, secret);
+  }
+  want("LMAIL_SMTP_PORT", () => "2525");
+  want("LMAIL_WEBHOOK_SECRET", webhookSecret);
+  want("LDRIVE_WEBHOOK_SECRET", webhookSecret);
+  want("LDRIVE_UPLOAD_KEY", secret);
   save();
   return { ...current, ...missing };
 }
@@ -233,39 +257,45 @@ async function organizationScopeId(): Promise<string> {
   return (await keycloakJson<ClientScope[]>(`/${REALM}/client-scopes`))!.find((scope) => scope.name === "organization")!.id;
 }
 
-async function setupClient(appUrl: string, clientSecret: string) {
+type ClientSpec = { clientId: string; name: string; appUrl: string; callback: string; secret: string; audience?: string };
+
+async function setupClient(spec: ClientSpec) {
+  const { appUrl, clientId } = spec;
   const settings = {
-    clientId: CLIENT_ID,
-    name: "Mission Control",
+    clientId,
+    name: spec.name,
     protocol: "openid-connect",
     enabled: true,
     // Confidential: the secret stays on the server. The browser never holds a token.
     publicClient: false,
     clientAuthenticatorType: "client-secret",
-    secret: clientSecret,
+    secret: spec.secret,
     standardFlowEnabled: true,
     // The password grant and the implicit flow are off: the only way in is Keycloak's sign-in page.
     directAccessGrantsEnabled: false,
     implicitFlowEnabled: false,
     serviceAccountsEnabled: false,
     webOrigins: [],
-    redirectUris: [`${appUrl}/api/auth/callback`],
+    redirectUris: [`${appUrl}${spec.callback}`],
     attributes: { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": `${appUrl}/` },
   };
-  let [client] = (await keycloakJson<{ id: string }[]>(`/${REALM}/clients?clientId=${CLIENT_ID}`))!;
+  let [client] = (await keycloakJson<{ id: string }[]>(`/${REALM}/clients?clientId=${clientId}`))!;
   if (client) await keycloak("PUT", `/${REALM}/clients/${client.id}`, { ...settings, id: client.id });
   else {
     await keycloak("POST", `/${REALM}/clients`, settings);
-    [client] = (await keycloakJson<{ id: string }[]>(`/${REALM}/clients?clientId=${CLIENT_ID}`))!;
+    [client] = (await keycloakJson<{ id: string }[]>(`/${REALM}/clients?clientId=${clientId}`))!;
   }
-  const mappers: Mapper[] = [
-    {
+  const audience: Mapper[] = spec.audience
+    ? [{
       // Tokens for this app name it as their audience; the server refuses any other token.
-      name: `audience ${AUDIENCE}`,
+      name: `audience ${spec.audience}`,
       protocol: "openid-connect",
       protocolMapper: "oidc-audience-mapper",
-      config: { "included.custom.audience": AUDIENCE, "access.token.claim": "true", "id.token.claim": "false" },
-    },
+      config: { "included.custom.audience": spec.audience, "access.token.claim": "true", "id.token.claim": "false" },
+    }]
+    : [];
+  const mappers: Mapper[] = [
+    ...audience,
     {
       name: "approval_limit",
       protocol: "openid-connect",
@@ -288,7 +318,7 @@ async function setupClient(appUrl: string, clientSecret: string) {
   }
   // The organization claim is always in the token, so the app never has to ask for it.
   await keycloak("PUT", `/${REALM}/clients/${client.id}/default-client-scopes/${await organizationScopeId()}`);
-  console.log(`Client ${CLIENT_ID}: redirect ${settings.redirectUris.join(", ")}`);
+  console.log(`Client ${clientId}: redirect ${settings.redirectUris.join(", ")}`);
 }
 
 type RealmRole = { id: string; name: string };
@@ -385,11 +415,16 @@ async function main() {
   const values = ensureSettings();
   console.log("Starting Postgres, Keycloak, OpenFGA and MinIO (the first start takes a minute)...");
   execFileSync("docker", ["compose", "--env-file", envFile, "-f", path.join(root, "infra/docker-compose.yml"), "up", "-d", "--wait"], { stdio: "inherit" });
+  // The databases script is idempotent: it creates what is missing and sets every password from .env.
+  execFileSync("docker", ["compose", "--env-file", envFile, "-f", path.join(root, "infra/docker-compose.yml"), "exec", "-T", "postgres", "bash", "/docker-entrypoint-initdb.d/01-databases.sh"], { stdio: "inherit" });
   await signInAsAdmin(values.KEYCLOAK_ADMIN_PASSWORD);
   await setupRealm();
   await setupLimitAttribute();
   const organizations = await setupOrganizations();
-  await setupClient(values.APP_URL, values.OIDC_CLIENT_SECRET);
+  await setupClient({ clientId: CLIENT_ID, name: "Mission Control", appUrl: values.APP_URL, callback: "/api/auth/callback", secret: values.OIDC_CLIENT_SECRET, audience: AUDIENCE });
+  for (const app of WORLD) {
+    await setupClient({ clientId: app.id, name: app.name, appUrl: values[`${app.prefix}_URL`], callback: "/auth/callback", secret: values[`${app.prefix}_CLIENT_SECRET`] });
+  }
   const roles = await setupRoles();
   for (const person of SEED_PEOPLE) await setupPerson(person, organizations, roles, values.SEED_USER_PASSWORD);
   console.log(`People: ${SEED_PEOPLE.map((person) => `${person.email} (${person.role ?? "viewer"})`).join(", ")}`);

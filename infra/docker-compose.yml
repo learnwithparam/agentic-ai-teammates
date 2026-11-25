@@ -15,6 +15,9 @@ services:
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?run npm run setup}
       OPENFGA_DB_PASSWORD: ${OPENFGA_DB_PASSWORD:?run npm run setup}
       TEAMMATES_DB_PASSWORD: ${TEAMMATES_DB_PASSWORD:?run npm run setup}
+      LMAIL_DB_PASSWORD: ${LMAIL_DB_PASSWORD:?run npm run setup}
+      LDRIVE_DB_PASSWORD: ${LDRIVE_DB_PASSWORD:?run npm run setup}
+      QUIRKBOOKS_DB_PASSWORD: ${QUIRKBOOKS_DB_PASSWORD:?run npm run setup}
     volumes:
       - teammates_postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
