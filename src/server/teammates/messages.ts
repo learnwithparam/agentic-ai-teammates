@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { InboxEvent } from "../inbox";
-import { ALWAYS_READ } from "../memory";
+import { ALWAYS_READ, INSTRUCTIONS, REPORTED } from "../memory";
 import { CapReached, type Run } from "../run";
 import { toolDefinition, type ToolName } from "../tools";
 import type { TeammateDefinition } from "./define";
@@ -23,9 +23,10 @@ The person may have sent several messages in a row. Answer them together, once.
 You cannot post, send, approve or change anything from this conversation. If the person asks for that, say where they can do it on the board.
 Write plain sentences, at most 120 words. No markdown tables.`;
 
-const ACT_RULES = `You may also set a follow-up for yourself with team.follow_up when the person asks you to look at something later. Pass their email as person, so you can tell them what you found.
+const ACT_RULES = `You may also set a follow-up for yourself with team.follow_up when the person asks you to look at something later. You will tell them what you found.
+When the person asks you to do your job on a document, such as posting a bill from an email, find it with your tools and hand it to yourself with team.hand_over. Every check still runs, under the person's own approval limit.
 Keep a line of progress with memory.progress when a task will take more than this conversation, and a fact worth keeping with memory.note.
-Say plainly what you set, and when.`;
+Say plainly what you set or handed over, and when.`;
 
 // Takes the person.message events in a batch, answers each person once, and returns the rest.
 // Three quick messages from one person get one answer, as the article's inbox batching asks.
@@ -62,13 +63,16 @@ export function chatTools(definition: Pick<TeammateDefinition, "tools" | "capabi
   return ["memory.read", ...chat.reads, ...writes];
 }
 
-// The memory a run reads before it starts: instructions, the index of notes, and what it reported.
-export async function standingMemory(run: Run, thread: string): Promise<Record<string, string | null>> {
+// The memory a run reads before it starts. Someone who only views the teammate gets its
+// instructions alone. Otherwise it is the instructions, the index of notes, and what it already
+// told this person: never what it told anyone else.
+export async function standingMemory(run: Run, thread: string, reader: { person: string; reach: "board" | "tools" } | null): Promise<Record<string, string | null>> {
   const files: Record<string, string | null> = {};
-  for (const path of ALWAYS_READ) {
-    const read = await run.tool(thread, "memory.read", { path });
-    files[path] = read.status === "done" ? MemoryText.parse(read.result).text : null;
-  }
+  const text = (read: Awaited<ReturnType<Run["tool"]>>) => (read.status === "done" ? MemoryText.parse(read.result).text : null);
+  const paths = reader?.reach === "board" ? [INSTRUCTIONS] : ALWAYS_READ.filter((path) => path !== REPORTED);
+  for (const path of paths) files[path] = text(await run.tool(thread, "memory.read", { path }));
+  // The gateway hands back only this person's lines, so no answer can quote what others were told.
+  if (reader?.reach === "tools") files[REPORTED] = text(await run.tool(thread, "memory.reported", { person: reader.person }));
   return files;
 }
 
@@ -76,7 +80,8 @@ async function answer(run: Run, thread: string, messages: Message[], tools: Tool
   const last = messages.at(-1) as Message;
   const acts = tools.some((tool) => toolDefinition(tool).modelMayCall);
   // The fixed part comes first and the person's words last, so the fixed part can be cached.
-  const memory = await standingMemory(run, thread);
+  const reach = messages.every((message) => message.reach === "tools") ? "tools" : "board";
+  const memory = await standingMemory(run, thread, { person: last.person, reach });
   const context = { yourMemory: memory, now: new Date().toISOString(), person: last.person, ...(await run.talkContext(last.person)) };
   const asked = messages.map((message) => message.text).join("\n\n");
   const result = await run.toolLoop({

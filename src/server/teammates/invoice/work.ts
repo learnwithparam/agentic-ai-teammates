@@ -2,7 +2,8 @@ import { Command, type BaseCheckpointSaver } from "@langchain/langgraph";
 import { z } from "zod";
 import type { InboxEvent } from "../../inbox";
 import { CapReached, type Run } from "../../run";
-import type { InvoiceSource } from "../../tools";
+import { InvoiceSource } from "../../tools";
+import { stableUuid } from "../../tools/team";
 import { type Decision, invoiceGraph, type Result } from "./graph";
 
 // The invoice teammate. It turns a batch of inbox events into work: each PDF or invoice email
@@ -32,8 +33,13 @@ const Changes = z.object({
   nextToken: z.string(),
 });
 const DecidedPayload = z.object({ approvalId: z.string(), threadId: z.string(), status: z.enum(["approved", "denied"]) });
+// A document a person handed over in chat. Only the gateway writes this event, from the person's token.
+const RequestPayload = z.object({ requestId: z.uuid(), person: z.email(), from: z.string(), source: InvoiceSource });
+type Request = z.infer<typeof RequestPayload>;
 
-type Work = { threadId: string; start: { source: InvoiceSource; body: string | null } } | { threadId: string; resume: Decision };
+type Work =
+  | { threadId: string; start: { source: InvoiceSource; body: string | null; requestId: string | null }; request?: Request }
+  | { threadId: string; resume: Decision };
 
 export function invoiceTeammate(checkpointer: BaseCheckpointSaver) {
   const runs = new Map<string, Run>();
@@ -51,6 +57,8 @@ export function invoiceTeammate(checkpointer: BaseCheckpointSaver) {
         try {
           const result = await runThread(run, item);
           if (result) run.outcome(item.threadId, result.outcome, result.note);
+          // The person who handed the document over hears how it went, in their conversation.
+          if ("request" in item && item.request) await tellRequester(run, graph, item.threadId, item.request);
         } catch (error) {
           if (!(error instanceof CapReached)) throw error;
           // A limit ends the run. The thread keeps its checkpoint and the cursors stay where they
@@ -99,6 +107,10 @@ async function plan(run: Run, events: InboxEvent[]): Promise<Work[]> {
   const driveEvents = events.filter((event) => event.type === "drive.changed");
   if (mailEvents.length) work.push(...(await newMail(run)));
   if (driveEvents.length) work.push(...(await newFiles(run)));
+  for (const event of events.filter((event) => event.type === "person.request" && event.source === "request")) {
+    const request = RequestPayload.parse(event.payload);
+    work.push({ threadId: `invoice:request:${request.requestId}`, start: { source: request.source, body: null, requestId: request.requestId }, request });
+  }
   for (const event of events.filter((event) => event.type === "approval.decided")) {
     const decided = DecidedPayload.parse(event.payload);
     work.push({ threadId: decided.threadId, resume: { status: decided.status, approvalId: decided.approvalId } });
@@ -115,9 +127,9 @@ async function newMail(run: Run): Promise<Work[]> {
     const message = Message.parse(await read(run, scan, "mail.message", { id }));
     const base = { kind: "mail" as const, id: message.id, sender: message.from, subject: message.subject, messageId: message.messageId };
     const pdfs = message.attachments.filter((attachment) => attachment.contentType.includes("pdf"));
-    for (const pdf of pdfs) work.push({ threadId: `invoice:mail:${message.id}:${pdf.id}`, start: { source: { ...base, attachmentId: pdf.id }, body: null } });
+    for (const pdf of pdfs) work.push({ threadId: `invoice:mail:${message.id}:${pdf.id}`, start: { source: { ...base, attachmentId: pdf.id }, body: null, requestId: null } });
     // An email with no PDF may hold its invoice in the body. The screen step decides.
-    if (pdfs.length === 0) work.push({ threadId: `invoice:mail:${message.id}`, start: { source: { ...base, attachmentId: null }, body: message.text } });
+    if (pdfs.length === 0) work.push({ threadId: `invoice:mail:${message.id}`, start: { source: { ...base, attachmentId: null }, body: message.text, requestId: null } });
   }
   run.advanceCursor("mail", history.historyId);
   return work;
@@ -131,7 +143,7 @@ async function newFiles(run: Run): Promise<Work[]> {
     .filter((file) => file.folder === INVOICE_FOLDER && file.contentType.includes("pdf"))
     .map((file) => ({
       threadId: `invoice:drive:${file.id}`,
-      start: { source: { kind: "drive" as const, id: file.id, attachmentId: null, sender: null, subject: file.name, messageId: null }, body: null },
+      start: { source: { kind: "drive" as const, id: file.id, attachmentId: null, sender: null, subject: file.name, messageId: null }, body: null, requestId: null },
     }));
 }
 
@@ -139,6 +151,16 @@ async function read(run: Run, threadId: string, tool: "mail.history" | "mail.mes
   const result = await run.tool(threadId, tool, args);
   if (result.status !== "done") throw new Error(`${tool} did not run: ${result.status}.`);
   return result.result;
+}
+
+// One line in the person's conversation. The message id comes from the request, so a retry writes it once.
+async function tellRequester(run: Run, graph: ReturnType<typeof invoiceGraph>, threadId: string, request: Request) {
+  const state = await graph.getState({ configurable: { thread_id: threadId } });
+  const title = titleOf(state.values);
+  const text = state.next.includes("wait")
+    ? `${title} waits for a person to approve it. It is on the board.`
+    : (state.values.result?.note ?? `${title} is done.`);
+  await run.reply(request.person, stableUuid(`request:${request.requestId}`), text);
 }
 
 function titleOf(values: { invoice?: { vendorName: string; invoiceNumber: string } | null; source?: InvoiceSource }): string {

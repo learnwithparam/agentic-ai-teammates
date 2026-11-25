@@ -21,6 +21,7 @@ import { COMPANIES } from "./people";
 import { decisionFor } from "./policy";
 import { FAST_TASKS, type Outcome, route, ROUTING_MODES, STRONG_TASKS, type Task } from "./router";
 import { budgetLeft, recordSpend } from "./spend";
+import type { Check } from "./permissions";
 import { allowedTools, teammateKind } from "./teammates/registry";
 import { type Card, isToolName, modelToolSpec, type ToolContext, toolDefinition, type ToolName, type ToolResult } from "./tools";
 
@@ -42,6 +43,8 @@ export type GatewayDeps = {
   // The news sources and the article reader. Both reach the public internet, so only the gateway runs them.
   news: { collect: (desk: NewsDesk) => ReturnType<typeof collectStories>; read: typeof readArticle };
   tokens: { worker: string; dispatcher: string };
+  // OpenFGA, for work a person hands over: it runs under that person's own approval limit.
+  check: Check;
 };
 
 export { PUBLISHED_LOOKBACK_DAYS } from "./tools/news";
@@ -237,8 +240,8 @@ export function createGatewayApp(deps: GatewayDeps): Express {
     let reasons = checked.reasons ?? [];
     if (reasons.length === 0) {
       const rule = await decisionFor(pool, scope.company, scope.teammate, name);
-      if (rule === "allow") return tool.run(ctx, args, { send, decidedBy: null, because: "Every check passed." }, checked.state);
-      const verdict = rule === "classify" ? await judge(scope, name, tool.judgeRules, args) : null;
+      if (rule === "allow") return tool.run(ctx, args, { send, decidedBy: null, because: checked.because ?? "Every check passed." }, checked.state);
+      const verdict = rule === "classify" ? await judge(scope, name, tool.judgeRules, checked.judgeWith ?? args) : null;
       if (verdict?.safe) return tool.run(ctx, args, { send, decidedBy: null, because: "The quick check found it safe." }, checked.state);
       if (verdict) reasons = [verdict.reason];
       else if (rule === "approve") reasons = [tool.ruleReason ?? "A standing rule asks a person to approve every call of this tool."];

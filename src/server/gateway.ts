@@ -6,6 +6,7 @@ import { optionalSetting, requireSettings, setting } from "./env";
 import { createGatewayApp } from "./gateway-app";
 import { createModelClient } from "./llm";
 import { Memory } from "./memory";
+import { openFgaCheck } from "./permissions";
 import { readArticle } from "./news/article";
 import { collectStories } from "./news/sources";
 import { createS3 } from "./s3";
@@ -21,6 +22,7 @@ requireSettings([
   "QUIRKBOOKS_URL", "QUIRKBOOKS_API_KEY",
   "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL", "HOOKS_URL",
   "S3_ENDPOINT", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY",
+  "FGA_API_URL", "FGA_API_TOKEN", "FGA_STORE_ID", "FGA_MODEL_ID",
 ]);
 
 const stopTracing = startTracing("gateway");
@@ -50,6 +52,12 @@ const app = createGatewayApp({
   memory,
   news: { collect: (desk) => collectStories(desk, exaKey ?? null), read: readArticle },
   tokens: { worker: setting("GATEWAY_WORKER_TOKEN"), dispatcher: setting("GATEWAY_DISPATCHER_TOKEN") },
+  check: openFgaCheck({
+    apiUrl: setting("FGA_API_URL"),
+    apiToken: setting("FGA_API_TOKEN"),
+    storeId: setting("FGA_STORE_ID"),
+    modelId: setting("FGA_MODEL_ID"),
+  }),
 });
 
 // The world apps' notices stop when a watch runs out, so the gateway renews them every hour.

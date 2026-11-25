@@ -42,8 +42,11 @@ export type ToolContext = {
 export type Grant = { send: "draft" | "queued"; decidedBy: string | null; because: string };
 
 // What a guard found. deny refuses the call. reasons ask a person, even when the policy allows it.
-// state carries what the guard read to the run, so it is not read twice.
-export type GuardResult<State> = { deny?: string; reasons?: string[]; state?: State };
+// state carries what the guard read to the run, so it is not read twice. because, when a call
+// runs without a person, says why in the words the record keeps, such as "Asked by Ravi Menon".
+// judgeWith is what the quick check reads in place of the model's arguments: facts the gateway
+// read itself, such as the person's own words.
+export type GuardResult<State> = { deny?: string; reasons?: string[]; state?: State; because?: string; judgeWith?: unknown };
 
 export type ApprovalCard = { title: string; brief: string; amount?: number; currency?: string; canAllowAlways: boolean };
 

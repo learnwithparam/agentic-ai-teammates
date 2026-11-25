@@ -6,7 +6,8 @@ export const news = defineTeammate({
   id: "news",
   name: "News teammate",
   purpose: "Writes the company's morning news from public sources, linking only to stories a source gave that day.",
-  tools: ["news.collect", "news.read", "news.publish", "memory.read", "team.remind", "team.digest"],
+  tools: ["news.collect", "news.read", "news.publish", "memory.read",
+    "memory.reported", "team.remind", "team.digest"],
   // The edition at seven on a working morning, and the day's summary in the evening.
   schedules: [{ name: EDITION_TIMER, cron: "0 7 * * 1-5" }, DIGEST],
   listens: [],

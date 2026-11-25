@@ -325,10 +325,22 @@ test("a message to a teammate is stored once and queued once, however often it i
   refused.clear();
   const events = await pool.query("SELECT type, payload FROM inbox_events WHERE source = 'person' AND source_id = $1", [`${MEI.email}/${messageId}`]);
   // Mei only views the teammate, so its answer may use only what the board already shows her.
-  const payload = { messageId, text: "What waits for me?", from: MEI.name, person: MEI.email, reach: "board" };
+  // The authority comes from her signed token, so the gateway can act for her only as far as she may.
+  const authority = { subject: MEI.subject, name: MEI.name, email: MEI.email, roles: [], approvalLimit: null };
+  const payload = { messageId, text: "What waits for me?", from: MEI.name, person: MEI.email, reach: "board", authority };
   assert.deepEqual(events.rows, [{ type: "person.message", payload }]);
   const { lines } = (await (await call("/api/teammates/invoices/conversation")).json()) as { lines: { role: string; text: string; author: string }[] };
   assert.deepEqual(lines.map(({ role, text, author }) => ({ role, text, author })), [{ role: "person", text: "What waits for me?", author: MEI.name }]);
+
+  // Ravi decides bills, so his answer may read with the teammate's tools, under his own limit.
+  signedIn = RAVI;
+  refused.add("can_configure");
+  const raviMessage = randomUUID();
+  assert.equal((await call("/api/teammates/news/messages", { method: "POST", body: { messageId: raviMessage, text: "Post Lumen's invoice." } })).status, 202);
+  refused.clear();
+  const raviEvent = await pool.query("SELECT payload FROM inbox_events WHERE source = 'person' AND source_id = $1", [`${RAVI.email}/${raviMessage}`]);
+  assert.equal(raviEvent.rows[0].payload.reach, "tools");
+  assert.deepEqual(raviEvent.rows[0].payload.authority, { subject: RAVI.subject, name: RAVI.name, email: RAVI.email, roles: ["approver"], approvalLimit: 5000 });
 });
 
 test("only someone who may configure a teammate lets it read the books and mail for an answer", async () => {

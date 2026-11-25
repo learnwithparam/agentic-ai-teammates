@@ -56,6 +56,7 @@ export function defineTeammate(teammate: TeammateDefinition): TeammateDefinition
   };
   for (const tool of teammate.capabilities.chat.reads) missing(tool, "lets chat read with it");
   missing("memory.read", "reads its memory every run");
+  missing("memory.reported", "reads what it told the person it answers");
   missing("team.remind", "can wait for an approval");
   if (teammate.capabilities.followUps) missing("team.follow_up", "sets follow-ups");
   if (teammate.capabilities.followUps || teammate.capabilities.chat.mode === "act") missing("memory.report", "tells people what it found");

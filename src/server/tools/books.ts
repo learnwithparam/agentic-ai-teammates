@@ -3,7 +3,8 @@ import type { Accounting } from "../adapters/types";
 import { payloadHash } from "../canonical";
 import { checkInvoice, Invoice, PO_TOLERANCE, type Reason, REASONS } from "../checks";
 import { COMPANIES } from "../people";
-import { defineTool, readTool } from "./define";
+import { askerAsPerson, Authority } from "./asker";
+import { defineTool, readTool, type ToolContext } from "./define";
 import { InvoiceSource, Text } from "./shapes";
 
 // QuirkBooks: vendors, purchase orders and bills.
@@ -21,7 +22,32 @@ async function bookFacts(books: Accounting, invoice: Invoice, source: InvoiceSou
   return { vendor, po: purchaseOrder, duplicateBillId: duplicates[0]?.id ?? null, sender: source.sender };
 }
 
-export const PostBillArgs = z.object({ invoice: Invoice, source: InvoiceSource, brief: z.string().min(1).max(1500).nullable() });
+// requestId names the person.request a person handed over, when the bill came from one.
+export const PostBillArgs = z.object({
+  invoice: Invoice,
+  source: InvoiceSource,
+  brief: z.string().min(1).max(1500).nullable(),
+  requestId: z.uuid().nullable().optional(),
+});
+
+const Request = z.object({ requestId: z.uuid(), from: z.string(), source: InvoiceSource, authority: Authority });
+
+// The request a person handed over, read from the inbox row only the gateway writes.
+async function handedOver(ctx: ToolContext, requestId: string) {
+  const { rows } = await ctx.deps.pool.query<{ payload: unknown }>(
+    "SELECT payload FROM inbox_events WHERE company = $1 AND teammate = $2 AND source = 'request' AND type = 'person.request' AND source_id = $3",
+    [ctx.scope.company, ctx.scope.teammate, requestId],
+  );
+  return rows[0] ? Request.parse(rows[0].payload) : null;
+}
+
+const sameDocument = (a: InvoiceSource, b: InvoiceSource) => a.kind === b.kind && a.id === b.id && a.attachmentId === b.attachmentId;
+
+// A check's reason in words. The standing rule and a request's note are already words.
+function cardReason(reason: string): string {
+  if (reason in REASONS) return REASONS[reason as Reason];
+  return reason === "standing_rule" ? "A standing rule asks a person to approve every bill." : reason;
+}
 
 export const booksTools = {
   "books.find_vendor": readTool(
@@ -44,14 +70,26 @@ export const booksTools = {
     readOnly: false,
     ruleReason: "standing_rule",
     guard: async (ctx, args) => {
+      const request = args.requestId ? await handedOver(ctx, args.requestId) : null;
+      if (args.requestId && (!request || !sameDocument(request.source, args.source))) return { deny: "That request does not name this document." };
       const facts = await bookFacts(ctx.deps.books, args.invoice, args.source);
       const company = COMPANIES[ctx.scope.company];
       const reasons = checkInvoice(args.invoice, facts, { currency: company.currency, autoPostLimit: ctx.teammate.autoPostLimit, poTolerance: PO_TOLERANCE });
-      return { reasons, state: facts };
+      if (!request) return { reasons, state: facts };
+      const asked = `Asked by ${request.from}`;
+      if (reasons.length === 0) return { reasons, state: facts, because: `${asked}. Every check passed.` };
+      // Work a person handed over runs under their own limit. That limit lifts only the teammate's
+      // auto-post limit: every other check still asks a person, and so does an amount above it.
+      const onlyTheLimit = reasons.length === 1 && reasons[0] === "over_limit";
+      if (!onlyTheLimit) return { reasons, state: facts };
+      const person = askerAsPerson(request.authority, ctx.scope.company);
+      const allowed = await ctx.deps.check(person, "can_decide", { type: "approval", id: request.requestId, company: ctx.scope.company }, { amount: args.invoice.total });
+      if (allowed) return { reasons: [], state: facts, because: `${asked}, within their limit.` };
+      return { reasons: [...reasons, `${request.from} asked for this, and it is above what they may approve alone.`], state: facts };
     },
     card: (args, reasons) => ({
       title: `${args.invoice.vendorName} ${args.invoice.invoiceNumber}`,
-      brief: args.brief ?? reasons.map((reason) => REASONS[reason as Reason] ?? "A standing rule asks a person to approve every bill.").join(" "),
+      brief: args.brief ?? reasons.map(cardReason).join(" "),
       amount: args.invoice.total,
       currency: args.invoice.currency,
       // A failed check is a fact about one invoice, so it never offers "allow always".

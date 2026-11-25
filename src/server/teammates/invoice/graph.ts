@@ -24,6 +24,8 @@ type Recalled = { instructions: string | null; pastDecisions: string | null };
 
 const State = Annotation.Root({
   source: Annotation<InvoiceSource>,
+  // The person.request this thread came from, when a person handed the document over in chat.
+  requestId: Annotation<string | null>,
   // The email body, for an invoice written in the email itself.
   body: Annotation<string | null>,
   text: Annotation<string | null>,
@@ -238,7 +240,7 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
   // The gateway posts only when its own checks pass. Otherwise it answers with an approval.
   async function post(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
     const run = runOf(config);
-    const result = await postOrRefusal(() => run.tool(threadOf(config), "books.post_bill", { invoice: state.invoice!, source: state.source, brief: state.brief }));
+    const result = await postOrRefusal(() => run.tool(threadOf(config), "books.post_bill", { invoice: state.invoice!, source: state.source, brief: state.brief, requestId: state.requestId ?? null }));
     if (typeof result === "string") return refused(state, result);
     if (result.status === "needs_approval") return { approvalId: result.approvalId };
     return postResult(state, result);
@@ -256,7 +258,7 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
     await run.tool(threadOf(config), "memory.record_decision", { approvalId: state.approvalId! });
     if (state.decision!.status === "denied") return { result: { outcome: "nothing_to_send", note: `${label(state)} was denied by a person.` } };
     const result = await postOrRefusal(() =>
-      run.tool(threadOf(config), "books.post_bill", { invoice: state.invoice!, source: state.source, brief: state.brief }, state.approvalId!),
+      run.tool(threadOf(config), "books.post_bill", { invoice: state.invoice!, source: state.source, brief: state.brief, requestId: state.requestId ?? null }, state.approvalId!),
     );
     if (typeof result === "string") return refused(state, result);
     return postResult(state, result);

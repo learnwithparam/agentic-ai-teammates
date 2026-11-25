@@ -13,7 +13,7 @@ import { handleMessages } from "./messages";
 
 // A teammate whose chat reads with the given tools.
 function reading(reads: ToolName[]) {
-  return { tools: ["memory.read", ...reads] as ToolName[], capabilities: { chat: { mode: "read" as const, reads }, followUps: false, digest: false } };
+  return { tools: ["memory.read", "memory.reported", ...reads] as ToolName[], capabilities: { chat: { mode: "read" as const, reads }, followUps: false, digest: false } };
 }
 
 // A person's question against a real Postgres. The gateway answers from a script, so the test
@@ -107,4 +107,34 @@ test("a teammate whose chat acts is offered follow-ups and notes, but never a wr
   const offered = asks[0].tools ?? [];
   for (const tool of ["team.follow_up", "memory.progress", "memory.note"]) assert.ok(offered.includes(tool as ToolName), `${tool} was not offered`);
   for (const tool of ["books.post_bill", "mail.reply", "memory.record_decision", "memory.report", "team.digest"]) assert.ok(!offered.includes(tool as ToolName), `${tool} was offered`);
+});
+
+test("a viewer's answer reads only the instructions, and a person reads only what was reported to them", async () => {
+  const read: string[] = [];
+  const files: Record<string, string> = {
+    "instructions.md": "Ask before paying Lumen.",
+    "index.md": "- notes/vendor-v-007.md: Lumen Print House",
+  };
+  // Like the gateway, memory.reported answers with the asker's own lines only.
+  const reported = `- ${MEI}: Lumen's bill is posted.\n`;
+  const asks: ModelAsk[] = [];
+  const gateway = {
+    async model(_ref: unknown, ask: ModelAsk): Promise<RoutedAnswer> {
+      asks.push(ask);
+      return { tier: "fast", reason: "scripted", answer: { content: "Done.", toolCalls: [], inputTokens: 1, outputTokens: 1, costUsd: 0 } };
+    },
+    async tool(_run: unknown, tool: string, args: { path?: string; person?: string }) {
+      read.push(tool === "memory.reported" ? `reported for ${args.person}` : String(args.path));
+      return { status: "done", result: { text: tool === "memory.reported" ? reported : (files[String(args.path)] ?? null) } };
+    },
+  } as unknown as GatewayClient;
+  const start = () => Run.start(pool, gateway, { runId: randomUUID(), company: "bramble", teammate: "invoices" }, RUN_CAPS);
+
+  await handleMessages(await start(), [messageEvent(randomUUID(), "What did you post?", "board")], reading([]));
+  assert.deepEqual(read, ["instructions.md"]);
+  assert.match(String(asks[0].messages.at(-1)?.content), /"yourMemory": \{\s+"instructions.md": "Ask before paying Lumen."\s+\}/);
+
+  await handleMessages(await start(), [messageEvent(randomUUID(), "What did you post?", "tools")], reading([]));
+  assert.deepEqual(read.slice(1), ["instructions.md", "index.md", `reported for ${MEI}`]);
+  assert.match(String(asks[1].messages.at(-1)?.content), /Lumen's bill is posted/);
 });

@@ -268,11 +268,16 @@ export function createWebApp(deps: WebDeps): Express {
     const teammate = TeammateId.parse(request.params.id);
     const { messageId, text } = Message.parse(request.body);
     await requireTeammate(who, teammate, "can_view");
-    const reach = (await mayTeammate(who, teammate, "can_configure")) ? "tools" : "board";
+    // Someone who configures the teammate, or decides its approvals, may let it read with its tools.
+    const decides = who.roles.includes("admin") || who.roles.includes("approver");
+    const reach = decides || (await mayTeammate(who, teammate, "can_configure")) ? "tools" : "board";
     await say(pool, { company: who.company, teammate, person: who.email, messageId, role: "person", author: who.name, text });
+    // The authority comes from the signed token. The gateway reads it from this row when the
+    // teammate acts for the person, so work they hand over runs under their own limit.
+    const authority = { subject: who.subject, name: who.name, email: who.email, roles: who.roles, approvalLimit: who.approvalLimit ?? null };
     await inbox.receive({
       company: who.company, teammate, source: "person", sourceId: `${who.email}/${messageId}`, type: "person.message",
-      payload: { messageId, text, from: who.name, person: who.email, reach },
+      payload: { messageId, text, from: who.name, person: who.email, reach, authority },
     });
     response.status(202).json({ messageId });
   });

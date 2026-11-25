@@ -10,7 +10,7 @@ import { inTransaction } from "./db";
 // - A run holds its events for a lease. If the worker dies, the lease runs out and the events are claimed again.
 // - A failed batch is tried again later, waiting longer each time, until it is dead and a person looks at it.
 
-export type EventType = "mail.received" | "drive.changed" | "approval.decided" | "timer.fired" | "person.message";
+export type EventType = "mail.received" | "drive.changed" | "approval.decided" | "timer.fired" | "person.message" | "person.request";
 
 export type IncomingEvent = {
   company: string;

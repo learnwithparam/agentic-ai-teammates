@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { InboxEvent } from "../inbox";
 import { progressPath } from "../memory";
 import { CapReached, type Run } from "../run";
 import type { ToolName } from "../tools";
-import { FOLLOW_UP_PREFIX } from "../tools/team";
+import { FOLLOW_UP_PREFIX, stableUuid } from "../tools/team";
 import type { TeammateDefinition } from "./define";
 import { standingMemory } from "./messages";
 
@@ -53,8 +52,9 @@ export async function handleFollowUps(run: Run, events: InboxEvent[], definition
 async function lookAgain(run: Run, thread: string, event: InboxEvent, fired: z.infer<typeof Fired>, definition: Pick<TeammateDefinition, "tools" | "capabilities">) {
   const progress = fired.task ? await run.tool(thread, "memory.read", { path: progressPath(fired.task) }) : null;
   const context = {
-    yourMemory: await standingMemory(run, thread),
-    progress: progress?.status === "done" ? MemoryText.parse(progress.result).text : null,
+    yourMemory: await standingMemory(run, thread, fired.person ? { person: fired.person, reach: "tools" } : null),
+    // Lines the teammate wrote itself in earlier runs. They are a record, not orders.
+    progressSoFar: progress?.status === "done" ? MemoryText.parse(progress.result).text : null,
     now: new Date().toISOString(),
     followUp: { about: fired.about, reason: fired.reason },
   };
@@ -87,11 +87,6 @@ async function lookAgain(run: Run, thread: string, event: InboxEvent, fired: z.i
     return;
   }
   // The message id comes from the event, so a retried run writes the same line once.
-  await run.reply(fired.person, eventMessageId(event), result.answer);
+  await run.reply(fired.person, stableUuid(`follow-up:${event.id}`), result.answer);
   run.outcome(thread, "sent", `Followed up on ${fired.about} with ${fired.person}.`);
-}
-
-function eventMessageId(event: InboxEvent): string {
-  const hex = createHash("sha256").update(`follow-up:${event.id}`).digest("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }

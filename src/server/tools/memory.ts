@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type Reason, REASONS } from "../checks";
-import { isMemoryPath, notePath, vendorTopic } from "../memory";
+import { isMemoryPath, notePath, REPORTED, vendorTopic } from "../memory";
 import { safeLine } from "../team-mail";
 import { matchVendor, PostBillArgs } from "./books";
 import { defineTool, readTool } from "./define";
@@ -35,7 +35,9 @@ export const memoryTools = {
   "memory.progress": defineTool({
     description: "Write one line of progress on a task that spans runs, such as lumen-bank-check.",
     args: z.object({ task: Topic, line: Line }),
-    decision: "allow",
+    // A later run reads this line, so it is judged like a note.
+    decision: "classify",
+    judgeRules: NOTE_RULES,
     readOnly: false,
     modelMayCall: true,
     card: (args) => ({ title: `Progress on ${args.task}`, brief: safeLine(args.line, 200), canAllowAlways: true }),
@@ -51,11 +53,26 @@ export const memoryTools = {
     card: () => ({ title: "A line in reported.md", brief: "A standing rule asks a person before each line.", canAllowAlways: true }),
     run: async (ctx, args) => ({ status: "done", result: await ctx.deps.memory.report(ctx.scope, args.person, safeLine(args.line, 300)) }),
   }),
+  // reported.md holds what was told to everyone, so a model never reads it whole.
   "memory.read": readTool(
-    "Read one file of this teammate's memory: instructions.md, index.md, reported.md, a note such as notes/vendor-v-007.md, or progress/<task>.md.",
-    z.object({ path: z.string().refine(isMemoryPath, "That is not a memory file.") }),
+    "Read one file of this teammate's memory: instructions.md, index.md, a note such as notes/vendor-v-007.md, or progress/<task>.md.",
+    z.object({ path: z.string().refine((path) => isMemoryPath(path) && path !== REPORTED, "That is not a memory file a model may read.") }),
     async (ctx, args) => ({ text: await ctx.deps.memory.read(ctx.scope, args.path) }),
   ),
+  // The lines of reported.md about one person. The core calls it for the person a run answers.
+  // It is not read-only, so it is never offered to a model.
+  "memory.reported": defineTool({
+    description: "Read what this teammate already told one person.",
+    args: z.object({ person: z.email() }),
+    decision: "allow",
+    readOnly: false,
+    card: () => ({ title: "What was told to a person", brief: "A standing rule asks a person before each read.", canAllowAlways: true }),
+    run: async (ctx, args) => {
+      const text = await ctx.deps.memory.read(ctx.scope, REPORTED);
+      const own = (text ?? "").split("\n").filter((line) => line.startsWith(`- ${args.person}: `));
+      return { status: "done", result: { text: own.length ? `${own.join("\n")}\n` : null } };
+    },
+  }),
   // Memory keeps what a person decided about a vendor, so the next invoice from that vendor can
   // show it. Every word comes from the approval: the decider, the checks, and the decider's own note.
   "memory.record_decision": defineTool({

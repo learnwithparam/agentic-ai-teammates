@@ -32,6 +32,7 @@ function gateway(asks: ModelAsk[], calls: { tool: string; args: Record<string, u
     },
     async tool(_ref: unknown, tool: string, args: Record<string, unknown>) {
       calls.push({ tool, args });
+      if (tool === "memory.reported") return { status: "done", result: { text: null } };
       if (tool === "memory.read") return { status: "done", result: { text: args.path === "progress/lumen-bank-check.md" ? "- Asked Lumen to confirm." : null } };
       if (tool === "memory.report") {
         const line = `${args.person}: ${args.line}`;
