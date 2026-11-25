@@ -67,10 +67,14 @@ npm run web
 Check that each one answers:
 
 ```bash
-for port in 8790 8788 8801 8802 8803; do curl -s -o /dev/null -w "$port %{http_code}\n" localhost:$port/healthz; done
+for port in 8790 8788 8801 8802 8803; do curl -s -o /dev/null -w "$port %{http_code}\n" localhost:$port/readyz; done
 ```
 
-Each line should end in 200. Open http://localhost:8790 and sign in as `ada@bramble.example`.
+Each line should end in 200. `/readyz` also asks Postgres and storage, so a 503 means one of them is down. `/healthz` only says the process is up.
+
+If Postgres stops or restarts, the processes keep running. They log the dropped connection and connect again when it is back.
+
+If Postgres keeps restarting, Docker is short of memory. Stop the other stacks you are not using, or give Docker more memory. Open http://localhost:8790 and sign in as `ada@bramble.example`.
 The password is `SEED_USER_PASSWORD` in `.env`.
 
 ![Mission Control after sign-in](../images/board.png)

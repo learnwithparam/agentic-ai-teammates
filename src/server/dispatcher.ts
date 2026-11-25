@@ -1,4 +1,4 @@
-import { createPool, migrate } from "./db";
+import { createPool, describeError, migrate } from "./db";
 import { drain } from "./dispatcher-loop";
 import { requireSettings, setting } from "./env";
 import { GatewayClient } from "./gateway-client";
@@ -26,7 +26,7 @@ async function loop() {
         console.log(`${item.title}: ${item.outcome}${item.reason ? ` (${item.reason})` : ""}.`);
       }
     } catch (error) {
-      console.error("The dispatcher could not read the outbox:", error);
+      console.error(`The dispatcher could not read the outbox: ${describeError(error)}`);
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }

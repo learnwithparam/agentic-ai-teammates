@@ -62,6 +62,13 @@ test("a break-it that names a missing file is caught", () => {
   assert.match(problems.join("\n"), /gone\.ts, which does not exist/);
 });
 
+test("a break-it that says to find a line the file no longer holds is caught", () => {
+  const section = 'Open `src/server/env.ts` and find `a line that was refactored away`. Run `src/server/env.test.ts`: "an empty value counts as missing".';
+  assert.match(breakItProblems("x.md", section, read).join("\n"), /which no named file holds/);
+  const real = 'Open `src/server/env.ts` and find `export function setting`. Run `src/server/env.test.ts`: "an empty value counts as missing".';
+  assert.doesNotMatch(breakItProblems("x.md", real, read).join("\n"), /which no named file holds/);
+});
+
 test("a missing image is caught", () => {
   assert.match(shapeProblems("docs/learner/00-start.md", page.replace("board.png", "gone.png"), read).join("\n"), /image .*gone\.png/);
 });

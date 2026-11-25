@@ -1,5 +1,5 @@
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
-import { createPool, migrate } from "./db";
+import { createPool, describeError, migrate } from "./db";
 import { requireSettings, setting } from "./env";
 import { GatewayClient } from "./gateway-client";
 import { Inbox, listenForEvents } from "./inbox";
@@ -38,7 +38,7 @@ async function loop() {
     try {
       for (const run of await workOnce(options)) console.log(`${run.company}/${run.teammate}: ${run.events} events, ${run.stop}.`);
     } catch (error) {
-      console.error("The worker could not read the inbox:", error);
+      console.error(`The worker could not read the inbox: ${describeError(error)}`);
     }
     if (stopping) break;
     await new Promise<void>((resolve) => {

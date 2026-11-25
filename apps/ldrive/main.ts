@@ -42,7 +42,7 @@ function uploadName(request: Request): string {
   return FileName.parse(request.query.name);
 }
 
-const app = createApp("ldrive");
+const app = createApp("ldrive", { postgres: () => pool.query("SELECT 1"), storage: () => ensureBucket(storage, BUCKET) });
 
 // ---------- The API, for programs ----------
 

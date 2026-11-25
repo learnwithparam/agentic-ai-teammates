@@ -1,4 +1,4 @@
-import { createPool, migrate } from "./db";
+import { createPool, describeError, migrate } from "./db";
 import { requireSettings, setting } from "./env";
 import { ensureStandingSchedules } from "./scheduler-loop";
 import { fireDue } from "./timers";
@@ -22,7 +22,7 @@ async function loop() {
     try {
       for (const timer of await fireDue(pool)) console.log(`${timer.teammate}: ${timer.name} fired.`);
     } catch (error) {
-      console.error("The scheduler could not read the timers:", error);
+      console.error(`The scheduler could not read the timers: ${describeError(error)}`);
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }

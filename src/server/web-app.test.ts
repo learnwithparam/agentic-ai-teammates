@@ -96,13 +96,13 @@ function routes(): { method: string; path: string }[] {
   return found;
 }
 
-test("every route needs a signed-in person, except the health check and the signed hooks", async () => {
+test("every route needs a signed-in person, except the health checks and the signed hooks", async () => {
   const all = routes();
   assert.ok(all.length >= 10, `Found only ${all.length} routes.`);
   for (const route of all) {
     const path = route.path.replace(/:company/g, "bramble").replace(/:tool/g, "mail.reply").replace(/:[a-z]+/gi, randomUUID());
     const response = await call(path, { method: route.method, body: route.method === "GET" ? undefined : {} });
-    if (route.path === "/healthz") assert.equal(response.status, 200);
+    if (route.path === "/healthz" || route.path === "/readyz") assert.equal(response.status, 200, `${route.path} is not up.`);
     else if (route.path.startsWith("/hooks/")) assert.equal(response.status, 401, `${route.method} ${route.path} took an unsigned notice.`);
     else assert.equal(response.status, 401, `${route.method} ${route.path} answered without a signed-in person.`);
   }

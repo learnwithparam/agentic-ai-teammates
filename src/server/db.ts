@@ -13,8 +13,19 @@ const MIGRATIONS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "m
 pg.types.setTypeParser(pg.types.builtins.DATE, (value) => value);
 
 // searchPath puts every table in one schema. The tests use it so each test file has its own tables.
+// One line for a database error in a loop's log. A refused connection has no message of its own, only a code.
+export function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const code = (error as { code?: string }).code;
+  return error.message || code || error.name;
+}
+
+// An idle connection that drops, as every one does when Postgres restarts, is only logged: the pool
+// opens a new one on the next query. Without this handler the drop would stop the whole process.
 export function createPool(connectionString: string, searchPath?: string): pg.Pool {
-  return new pg.Pool({ connectionString, max: 10, options: searchPath ? `-c search_path=${searchPath}` : undefined });
+  const pool = new pg.Pool({ connectionString, max: 10, options: searchPath ? `-c search_path=${searchPath}` : undefined });
+  pool.on("error", (error) => console.error(`A database connection dropped: ${error.message}`));
+  return pool;
 }
 
 // Each app passes its own folder of migrations; Mission Control's is the default.

@@ -4,8 +4,11 @@ import { fileURLToPath } from "node:url";
 import express, { type ErrorRequestHandler, type Express } from "express";
 import { ZodError } from "zod";
 
-// The shell every world app and Mission Control share: a health check, JSON bodies, the built
+// The shell every world app and Mission Control share: health checks, JSON bodies, the built
 // web page, and an error handler that logs the detail and shows people only a plain sentence.
+//
+// /healthz says the process is up. /readyz also asks each thing it depends on, such as Postgres
+// and storage, and answers 503 while one does not answer. Compose health checks use /readyz.
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -18,12 +21,28 @@ export class HttpError extends Error {
   }
 }
 
-export function createApp(name: string): Express {
+export type ReadyChecks = Record<string, () => Promise<unknown>>;
+
+export function createApp(name: string, ready: ReadyChecks = {}): Express {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", "loopback");
   app.get("/healthz", (_request, response) => {
     response.json({ ok: true, service: name });
+  });
+  app.get("/readyz", async (_request, response) => {
+    const down: string[] = [];
+    await Promise.all(
+      Object.entries(ready).map(async ([part, check]) => {
+        try {
+          await check();
+        } catch (error) {
+          down.push(part);
+          console.error(`${name} is not ready: ${part} did not answer.`, error);
+        }
+      }),
+    );
+    response.status(down.length ? 503 : 200).json({ ok: down.length === 0, service: name, down: down.sort() });
   });
   return app;
 }

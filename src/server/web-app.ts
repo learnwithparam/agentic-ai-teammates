@@ -19,7 +19,7 @@ import { INSTRUCTIONS, MAX_INSTRUCTIONS, type Memory } from "./memory";
 import type { NewsShelf } from "./news-shelf";
 
 // Mission Control's web process: the signed webhook handlers, and the API behind the board.
-// Every API route and the news page need a signed-in person; only /healthz and /hooks/* do not,
+// Every API route and the news page need a signed-in person; only /healthz, /readyz and /hooks/* do not,
 // and the hooks check a signature instead. Who may decide or configure is asked of OpenFGA on each request.
 
 export type WebDeps = {
@@ -64,7 +64,7 @@ export function createWebApp(deps: WebDeps): Express {
   const approvals = new Approvals(pool);
   const outbox = new Outbox(pool);
   const inbox = new Inbox(pool);
-  const app = createApp("mission-control");
+  const app = createApp("mission-control", { postgres: () => pool.query("SELECT 1"), storage: () => deps.memory.ready() });
 
   // The hooks read their own raw body to check its signature, so they come before express.json.
   app.use(createHooksRouter({ pool, inbox, secrets: deps.hookSecrets, google: deps.googleHooks }));

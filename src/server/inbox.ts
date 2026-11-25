@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { inTransaction } from "./db";
 
 // The event inbox: the first primitive. A webhook handler only calls receive() and answers at once.
@@ -192,16 +192,66 @@ export class Inbox {
   }
 }
 
-// Calls wake with "company/teammate" each time an event lands. The worker also polls,
-// so a notice lost while it reconnects only delays the work.
-export async function listenForEvents(pool: Pool, wake: (inbox: string) => void): Promise<() => Promise<void>> {
-  const client = await pool.connect();
-  client.on("notification", (notice) => {
-    if (notice.channel === "inbox" && notice.payload) wake(notice.payload);
-  });
-  await client.query("LISTEN inbox");
+// Calls wake with "company/teammate" each time an event lands. A Postgres restart drops the connection.
+// Then it connects again, waiting longer after each failure, and wakes the worker once in case a
+// notice landed while it was away. The worker also polls, so a lost notice only delays work.
+export const LISTEN_RETRY_MS = { first: 500, max: 30_000 };
+
+export async function listenForEvents(
+  pool: Pool,
+  wake: (inbox: string) => void,
+  retry = LISTEN_RETRY_MS,
+): Promise<() => Promise<void>> {
+  let client: PoolClient | null = null;
+  let stopped = false;
+  let wait = retry.first;
+  let timer: NodeJS.Timeout | undefined;
+
+  const connect = async () => {
+    const next = await pool.connect();
+    const lost = (error?: Error) => {
+      if (client !== next) return;
+      client = null;
+      next.release(error ?? true);
+      if (!stopped) {
+        console.error(`The inbox listener lost its connection${error ? `: ${error.message}` : ""}. Connecting again.`);
+        again();
+      }
+    };
+    next.on("error", lost);
+    next.on("end", () => lost());
+    next.on("notification", (notice) => {
+      if (notice.channel === "inbox" && notice.payload) wake(notice.payload);
+    });
+    await next.query("LISTEN inbox");
+    client = next;
+    wait = retry.first;
+  };
+
+  const again = () => {
+    timer = setTimeout(() => {
+      connect().then(
+        () => {
+          console.error("The inbox listener is connected again.");
+          wake("");
+        },
+        (error: Error) => {
+          console.error(`The inbox listener could not connect: ${error.message}. Trying again in ${Math.round(wait / 1000)}s.`);
+          wait = Math.min(wait * 2, retry.max);
+          if (!stopped) again();
+        },
+      );
+    }, wait);
+  };
+
+  await connect();
   return async () => {
-    await client.query("UNLISTEN inbox");
-    client.release();
+    stopped = true;
+    clearTimeout(timer);
+    const held = client;
+    client = null;
+    if (!held) return;
+    await held.query("UNLISTEN inbox").catch(() => {});
+    held.release();
   };
 }

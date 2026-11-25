@@ -160,6 +160,29 @@ test("a new event wakes a listening worker", async () => {
   await stop();
 });
 
+test("the listener connects again after Postgres drops its connection", async () => {
+  const inbox = new Inbox(pool);
+  const teammate = await newTeammate();
+  const woken: string[] = [];
+  const stop = await listenForEvents(pool, (name) => woken.push(name), { first: 50, max: 200 });
+  try {
+    // What a Postgres restart does to the listener: its backend is ended from the server side.
+    const { rowCount } = await pool.query(
+      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+        WHERE datname = current_database() AND query = 'LISTEN inbox' AND pid <> pg_backend_pid()`,
+    );
+    assert.ok(rowCount && rowCount > 0, "No listening connection was found to end.");
+    const deadline = Date.now() + 5000;
+    while (!woken.includes("") && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.ok(woken.includes(""), "The listener did not connect again and wake the worker.");
+    await inbox.receive(mail(teammate, "after-reconnect"));
+    while (!woken.includes(`bramble/${teammate}`) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.ok(woken.includes(`bramble/${teammate}`), "A notice after the drop did not wake the worker.");
+  } finally {
+    await stop();
+  }
+});
+
 test("an event that succeeds on a retry no longer shows the earlier error", async () => {
   const inbox = new Inbox(pool, { ...INBOX_SETTINGS, retrySeconds: 0 });
   const teammate = await newTeammate();

@@ -123,7 +123,7 @@ export function createGatewayApp(deps: GatewayDeps): Express {
   const { pool, callModel, books, files, memory } = deps;
   const approvals = new Approvals(pool);
   const outbox = new Outbox(pool);
-  const app = createApp("gateway");
+  const app = createApp("gateway", { postgres: () => pool.query("SELECT 1"), storage: () => memory.ready() });
   app.use(express.json({ limit: "2mb" }));
   // A call that comes with a run's trace continues it, so one run is one trace in Langfuse.
   app.use((request, _response, next) => context.with(propagation.extract(ROOT_CONTEXT, request.headers), next));

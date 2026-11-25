@@ -57,7 +57,7 @@ function outgoing(body: unknown) {
   return { ...mail, attachments: mail.attachments?.map((item) => ({ filename: item.filename, contentType: item.contentType, content: Buffer.from(item.base64, "base64") })) };
 }
 
-const app = createApp("lmail");
+const app = createApp("lmail", { postgres: () => pool.query("SELECT 1") });
 app.use(express.json({ limit: "20mb" }));
 
 // ---------- The API, for programs ----------

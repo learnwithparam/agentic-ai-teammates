@@ -22,7 +22,7 @@ await migrate(pool, MIGRATIONS);
 const books = new Books(pool);
 const requireScope = apiKeys(CLIENTS);
 
-const app = createApp("quirkbooks");
+const app = createApp("quirkbooks", { postgres: () => pool.query("SELECT 1") });
 app.use(express.json({ limit: "1mb" }));
 
 // ---------- The API, for programs ----------

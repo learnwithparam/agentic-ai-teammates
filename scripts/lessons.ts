@@ -53,6 +53,10 @@ export function breakItProblems(file: string, section: string, read: (path: stri
   if (!code.length) problems.push(`${file}: "Break it" must name the file you change, in backticks`);
   if (!tests.length) problems.push(`${file}: "Break it" must name the test file that catches it, in backticks`);
   for (const path of paths) if (read(path) === null) problems.push(`${file}: "Break it" names ${path}, which does not exist`);
+  // The line it tells you to find must still be in a file it names, or the next refactor breaks the step silently.
+  for (const [, snippet] of section.matchAll(/\bfind `([^`\n]+)`/g)) {
+    if (!code.some((path) => (read(path) ?? "").includes(snippet))) problems.push(`${file}: "Break it" says to find \`${snippet}\`, which no named file holds`);
+  }
   const titles = [...section.matchAll(/"([^"\n]{12,})"/g)].map((match) => match[1]);
   if (!titles.length) problems.push(`${file}: "Break it" must quote the title of the test that fails`);
   for (const title of titles) {
