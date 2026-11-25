@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createApp, HttpError } from "../../apps/shared/server";
 import { Approvals } from "./approvals";
+import { conversation, MAX_MESSAGE, say } from "./conversation";
 import type { Person } from "./auth";
 import { createHooksRouter } from "./hooks";
 import { Inbox } from "./inbox";
@@ -43,16 +44,20 @@ const TeammateSettings = z
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, "Send at least one setting.");
+// The page makes the message id, so sending the same message twice stores it once.
+const MessageText = z.string().trim().min(1).max(MAX_MESSAGE);
+const Message = z.object({ messageId: z.uuid(), text: MessageText });
 const Rule = z.object({ decision: z.enum(["allow", "classify", "approve"]).nullable() });
 
 export function createWebApp(deps: WebDeps): Express {
   const { pool, check } = deps;
   const approvals = new Approvals(pool);
   const outbox = new Outbox(pool);
+  const inbox = new Inbox(pool);
   const app = createApp("mission-control");
 
   // The hooks read their own raw body to check its signature, so they come before express.json.
-  app.use(createHooksRouter({ pool, inbox: new Inbox(pool), secrets: deps.hookSecrets }));
+  app.use(createHooksRouter({ pool, inbox, secrets: deps.hookSecrets }));
   app.use(express.json({ limit: "100kb" }));
   app.use("/api/auth", deps.auth.router);
   app.use("/api", deps.auth.requirePerson);
@@ -212,6 +217,27 @@ export function createWebApp(deps: WebDeps): Express {
       who.company, who.email, teammate, JSON.stringify({ text }),
     ]);
     response.json({ text });
+  });
+
+  // Anyone who sees a teammate may ask it something. Its answer comes from tools that only read.
+  app.get("/api/teammates/:id/conversation", async (request, response) => {
+    const who = person(request);
+    const teammate = TeammateId.parse(request.params.id);
+    await requireTeammate(who, teammate, "can_view");
+    response.json({ lines: await conversation(pool, who.company, teammate) });
+  });
+
+  app.post("/api/teammates/:id/messages", async (request, response) => {
+    const who = person(request);
+    const teammate = TeammateId.parse(request.params.id);
+    const { messageId, text } = Message.parse(request.body);
+    await requireTeammate(who, teammate, "can_view");
+    await say(pool, { company: who.company, teammate, messageId, role: "person", author: who.name, text });
+    await inbox.receive({
+      company: who.company, teammate, source: "person", sourceId: messageId, type: "person.message",
+      payload: { messageId, text, from: who.name },
+    });
+    response.status(202).json({ messageId });
   });
 
   app.get("/api/rules", async (request, response) => {

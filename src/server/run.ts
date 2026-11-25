@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { parseJsonText } from "./canonical";
+import { conversation, recentWork, say } from "./conversation";
 import type { GatewayClient, ModelAsk, RoutedAnswer, RunRef } from "./gateway-client";
 import type { ChatMessage } from "./llm";
 import type { Risk, RoutingMode, Task } from "./router";
@@ -137,6 +138,18 @@ export class Run {
       if (error instanceof CapReached) throw error;
       return JSON.stringify({ error: error instanceof Error ? error.message : "The tool failed." });
     }
+  }
+
+  // What a teammate answers a person from: the conversation so far and its own recent work.
+  async talkContext() {
+    const { company, teammate } = this.ref;
+    return { conversation: await conversation(this.pool, company, teammate, 20), ...(await recentWork(this.pool, company, teammate)) };
+  }
+
+  // The teammate's answer to one message. Answering the same message again changes nothing.
+  async reply(messageId: string, text: string) {
+    const { company, teammate, runId } = this.ref;
+    await say(this.pool, { company, teammate, messageId, role: "teammate", author: teammate, text, runId });
   }
 
   async note(kind: "check" | "note" | "model", title: string, detail: Record<string, unknown> = {}) {

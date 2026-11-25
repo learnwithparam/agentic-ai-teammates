@@ -281,3 +281,33 @@ test("an approver's limit travels as the condition on their approver tuple", () 
   const viewer = contextualTuples({ ...RAVI, roles: [] }, { type: "teammate", id: "bramble-invoices", company: "bramble" });
   assert.equal(viewer.length, 2);
 });
+
+test("a message to a teammate is stored once and queued once, however often it is sent", async () => {
+  signedIn = MEI;
+  const messageId = randomUUID();
+  for (let send = 0; send < 2; send++) {
+    const response = await call("/api/teammates/invoices/messages", { method: "POST", body: { messageId, text: "  What waits for me?  " } });
+    assert.equal(response.status, 202);
+  }
+  const events = await pool.query("SELECT type, payload FROM inbox_events WHERE source = 'person' AND source_id = $1", [messageId]);
+  assert.deepEqual(events.rows, [{ type: "person.message", payload: { messageId, text: "What waits for me?", from: MEI.name } }]);
+  const { lines } = (await (await call("/api/teammates/invoices/conversation")).json()) as { lines: { role: string; text: string; author: string }[] };
+  assert.deepEqual(lines.map(({ role, text, author }) => ({ role, text, author })), [{ role: "person", text: "What waits for me?", author: MEI.name }]);
+});
+
+test("someone who cannot see a teammate can neither write to it nor read its conversation", async () => {
+  signedIn = MEI;
+  allow = false;
+  const messageId = randomUUID();
+  assert.equal((await call("/api/teammates/news/messages", { method: "POST", body: { messageId, text: "Hello" } })).status, 403);
+  assert.equal((await call("/api/teammates/news/conversation")).status, 403);
+  const { rows } = await pool.query("SELECT 1 FROM inbox_events WHERE source_id = $1::text UNION ALL SELECT 1 FROM conversation WHERE message_id = $1::uuid", [messageId]);
+  assert.equal(rows.length, 0);
+});
+
+test("an empty or overlong message is refused", async () => {
+  signedIn = MEI;
+  for (const text of ["   ", "x".repeat(2001)]) {
+    assert.equal((await call("/api/teammates/invoices/messages", { method: "POST", body: { messageId: randomUUID(), text } })).status, 400);
+  }
+});

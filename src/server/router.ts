@@ -6,7 +6,7 @@ import { estimateCost, type Tier } from "./models";
 
 // Screening guards every other step, so it gets the deeper look. On the injection invoice the
 // quick check missed 4 times in 10. The deeper look missed 0 in 10 and costs a fraction of a cent more.
-export const FAST_TASKS = ["classify", "extract", "summarize"] as const;
+export const FAST_TASKS = ["classify", "extract", "summarize", "answer"] as const;
 export const STRONG_TASKS = ["screen", "investigate", "brief", "select"] as const;
 export type Task = (typeof FAST_TASKS)[number] | (typeof STRONG_TASKS)[number];
 export type Risk = "low" | "high";
