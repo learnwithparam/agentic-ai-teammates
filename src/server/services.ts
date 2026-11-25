@@ -6,7 +6,10 @@ import { LDrive } from "./adapters/ldrive";
 import { LMail } from "./adapters/lmail";
 import type { FileSource, MailSource } from "./adapters/types";
 import { optionalSetting, requireSettings, setting, type Setting } from "./env";
+import { GitHubPublisher } from "./github";
 import type { GoogleHooks } from "./hooks";
+import { NewsShelf, type NewsPublisher } from "./news-shelf";
+import type { S3Client } from "@aws-sdk/client-s3";
 import { COMPANIES } from "./people";
 
 // Which mail and file services this deploy reads. The workshop's own LMail and LDrive are the
@@ -71,4 +74,21 @@ export function googleHooks(services: { mail: MailService }): GoogleHooks | unde
   if (services.mail !== "gmail") return undefined;
   requireSettings(["HOOKS_URL", "GMAIL_ADDRESS", "GMAIL_PUSH_SERVICE_ACCOUNT"]);
   return { hooksUrl: setting("HOOKS_URL"), pushServiceAccount: setting("GMAIL_PUSH_SERVICE_ACCOUNT"), mailbox: setting("GMAIL_ADDRESS") };
+}
+
+// Where the news teammate publishes. Mission Control's own news page is the choice when nothing
+// is set, and needs nothing beyond the stack's storage. NEWS_TARGET=github publishes to a
+// GitHub repo instead, whose Pages site shows the cards to anyone.
+export async function newsPublisher(s3: S3Client): Promise<{ target: "site" | "github"; publisher: NewsPublisher }> {
+  const target = optionalSetting("NEWS_TARGET") ?? "site";
+  if (target === "site") {
+    const shelf = new NewsShelf(s3, setting("APP_URL"));
+    await shelf.ready();
+    return { target, publisher: shelf };
+  }
+  if (target !== "github") throw new Error(`NEWS_TARGET is ${target}. Use site or github.`);
+  // One Pages site shows one company's news.
+  if (Object.keys(COMPANIES).length > 1) throw new Error("A GitHub Pages site shows one company's news, so NEWS_TARGET=github serves one company only.");
+  requireSettings(["GITHUB_TOKEN", "NEWS_REPO"]);
+  return { target, publisher: new GitHubPublisher(setting("GITHUB_TOKEN"), setting("NEWS_REPO")) };
 }

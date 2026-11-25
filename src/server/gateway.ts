@@ -3,21 +3,20 @@ import { QuirkBooks } from "./adapters/quirkbooks";
 import { createPool, migrate } from "./db";
 import { optionalSetting, requireSettings, setting } from "./env";
 import { createGatewayApp } from "./gateway-app";
-import { GitHubPublisher } from "./github";
 import { createModelClient } from "./llm";
 import { Memory } from "./memory";
 import { readArticle } from "./news/article";
 import { collectStories } from "./news/sources";
 import { createS3 } from "./s3";
-import { chosenServices, openSources } from "./services";
+import { chosenServices, newsPublisher, openSources } from "./services";
 import { renewWatches } from "./subscriptions";
 import { startTracing } from "./tracing";
 
 // The gateway process. Start it with npm run gateway. It is the only process that holds the
-// OpenRouter key and the world apps' keys.
+// OpenRouter key, the world apps' keys and, for news on GitHub, the GitHub token.
 
 requireSettings([
-  "DATABASE_URL", "OPENROUTER_API_KEY", "GATEWAY_PORT", "GATEWAY_WORKER_TOKEN", "GATEWAY_DISPATCHER_TOKEN",
+  "APP_URL", "DATABASE_URL", "OPENROUTER_API_KEY", "GATEWAY_PORT", "GATEWAY_WORKER_TOKEN", "GATEWAY_DISPATCHER_TOKEN",
   "QUIRKBOOKS_URL", "QUIRKBOOKS_API_KEY",
   "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL", "HOOKS_URL",
   "S3_ENDPOINT", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY",
@@ -30,14 +29,14 @@ await migrate(pool);
 const services = chosenServices();
 const { mail, files } = openSources(pool, services);
 console.log(`Reading mail from ${services.mail} and files from ${services.files}.`);
-const githubToken = optionalSetting("GITHUB_TOKEN");
-const newsRepo = optionalSetting("NEWS_REPO");
-if (!githubToken || !newsRepo) console.log("News publishing is off until GITHUB_TOKEN and NEWS_REPO are set.");
 const exaKey = optionalSetting("EXA_API_KEY");
 console.log(exaKey ? "Exa is on as a news source." : "Exa is off as a news source until EXA_API_KEY is set.");
 
-const memory = new Memory(createS3());
+const storage = createS3();
+const memory = new Memory(storage);
 await memory.ready();
+const news = await newsPublisher(storage);
+console.log(news.target === "site" ? "News publishes to Mission Control's news page." : "News publishes to GitHub Pages.");
 
 const app = createGatewayApp({
   pool,
@@ -45,7 +44,7 @@ const app = createGatewayApp({
   mail,
   files,
   books: new QuirkBooks(setting("QUIRKBOOKS_URL"), setting("QUIRKBOOKS_API_KEY")),
-  publisher: githubToken && newsRepo ? new GitHubPublisher(githubToken, newsRepo) : null,
+  publisher: news.publisher,
   memory,
   news: { collect: (desk) => collectStories(desk, exaKey ?? null), read: readArticle },
   tokens: { worker: setting("GATEWAY_WORKER_TOKEN"), dispatcher: setting("GATEWAY_DISPATCHER_TOKEN") },

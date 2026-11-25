@@ -122,12 +122,17 @@ After changing `data/invoices/cases.ts`, write the files again with `npm run inv
 
 The news teammate starts at seven on working mornings. It collects the last two days of stories and drops the ones it published before. Then it picks up to five, reads each article and writes one card per story. Each card links only to a story a source gave that day. The gateway refuses any other link.
 
-To publish the cards, fork this repo and set two values in `.env`:
+The sources are public RSS feeds, Hacker News and GDELT, so they need no key. Set `EXA_API_KEY` to add Exa as a source.
 
+Each edition goes on Mission Control's news page, at http://localhost:8790/news/. It needs the same sign-in as the board, and each person sees their own company's news.
+
+A public GitHub Pages site can show the cards instead. Fork this repo and set three values in `.env`:
+
+- `NEWS_TARGET` is `github`.
 - `NEWS_REPO` is your fork, as owner/name.
 - `GITHUB_TOKEN` is a fine-grained token with Contents read and write on that repo only.
 
-Then turn on Pages in the fork's settings, with GitHub Actions as the source. Each edition is a commit to `news/public/data`, and the News page workflow puts it live. Set `EXA_API_KEY` to add Exa as a source.
+Then turn on Pages in the fork's settings, with GitHub Actions as the source. Each edition is a commit to `news/public/data`, and the News page workflow puts it live.
 
 The teammate starts quiet. Its first editions wait as drafts on the board until you let it send. To work on the page itself:
 

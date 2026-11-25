@@ -9,7 +9,7 @@ import { HttpError } from "../../apps/shared/server";
 // A quiet teammate's messages wait as drafts until a person releases them. Every teammate
 // starts quiet.
 
-export const TARGETS = ["lmail.send", "github.publish"] as const;
+export const TARGETS = ["lmail.send", "news.publish"] as const;
 export type Target = (typeof TARGETS)[number];
 export type OutboxStatus = "draft" | "queued" | "sending" | "sent" | "discarded" | "dead";
 

@@ -13,7 +13,8 @@ import { MEMBER_FRESH_DAYS, recordMember } from "./members";
 import type { Memory } from "./memory";
 import { setRule } from "./policy";
 import { testDatabase } from "./test-database";
-import { testMemory } from "./test-memory";
+import type { NewsShelf } from "./news-shelf";
+import { testMemory, testNewsShelf } from "./test-memory";
 
 // The gateway's writing tools against a real Postgres. A standing rule a person sets must hold
 // for every writing tool. Publishing the news once ignored it and went straight to the outbox.
@@ -22,6 +23,9 @@ let pool: Pool;
 let close: () => Promise<void>;
 let memory: Memory;
 let closeMemory: () => Promise<void>;
+let shelf: NewsShelf;
+let closeShelf: () => Promise<void>;
+const DISPATCHER = randomUUID();
 let server: Server;
 let base: string;
 const WORKER = randomUUID();
@@ -39,6 +43,7 @@ before(async () => {
   sdk.start();
   ({ pool, close } = await testDatabase());
   ({ memory, close: closeMemory } = await testMemory());
+  ({ shelf, close: closeShelf } = await testNewsShelf("https://mc.example"));
   const deps: GatewayDeps = {
     pool,
     callModel: (ask) => modelCall(ask),
@@ -55,14 +60,14 @@ before(async () => {
         };
       },
     }) as GatewayDeps["books"],
-    publisher: null,
+    publisher: shelf,
     memory,
     // The news sources answer with the stories below, and the reader with a set text, so no test reaches the internet.
     news: {
       collect: async () => ({ stories: STORIES, sources: [{ name: "Example News", stories: STORIES.length, error: null }] }),
       read: async (url) => ({ url, title: null, text: `The full text of ${url}.` }),
     },
-    tokens: { worker: WORKER, dispatcher: randomUUID() },
+    tokens: { worker: WORKER, dispatcher: DISPATCHER },
   };
   server = createGatewayApp(deps).listen(0);
   const address = server.address();
@@ -73,6 +78,7 @@ after(async () => {
   server.close();
   await close();
   await closeMemory();
+  await closeShelf();
   await sdk.shutdown();
 });
 
@@ -151,7 +157,7 @@ test("a standing rule to approve the news makes it wait for a person, with nothi
     const approved = { runId, company: "bramble", teammate: "news", threadId: "news:b", args: day, approvalId: result.approvalId };
     assert.equal((await callTool("news.publish", approved)).status, "done");
     assert.equal((await callTool("news.publish", approved)).status, "denied");
-    assert.deepEqual(await outboxFor(runId), [{ target: "github.publish", status: "queued" }]);
+    assert.deepEqual(await outboxFor(runId), [{ target: "news.publish", status: "queued" }]);
   } finally {
     await pool.query("DELETE FROM tool_rules WHERE teammate = 'news'");
   }
@@ -159,6 +165,22 @@ test("a standing rule to approve the news makes it wait for a person, with nothi
 
 // A model names a story by its id, and the gateway fetches the link it collected. So a model
 // never sends the gateway to a link of its own. Every card must link to a collected story.
+test("a released edition goes onto the news page, and its stories count as published", async () => {
+  // Its own story, so the tests on what counts as published before stay apart from this one.
+  const edition = { day: "2026-11-27", cards: [{ ...NEWS.cards[0], url: "https://example.org/canals" }] };
+  const response = await fetch(`${base}/dispatch/news.publish`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${DISPATCHER}` },
+    body: JSON.stringify({ company: "bramble", idempotencyKey: "news:bramble:2026-11-27", payload: edition }),
+  });
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.deepEqual(await response.json(), { url: "https://mc.example/news/?day=2026-11-27" });
+  const today = JSON.parse((await shelf.read("bramble", "today.json"))!);
+  assert.deepEqual({ day: today.day, cards: today.cards }, edition);
+  const { rows } = await pool.query("SELECT day FROM news_published WHERE company = 'bramble' AND url = $1", ["https://example.org/canals"]);
+  assert.equal(rows.length, 1);
+});
+
 test("news.read reads only a story collected for that day", async () => {
   const runId = await startRun("news");
   const { stories } = await collect(runId, "2026-11-27");

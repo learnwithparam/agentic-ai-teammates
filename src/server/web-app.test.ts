@@ -14,7 +14,8 @@ import type { Person } from "./auth";
 import { contextualTuples, type Check } from "./permissions";
 import { recordSpend } from "./spend";
 import { testDatabase } from "./test-database";
-import { testMemory } from "./test-memory";
+import type { NewsShelf } from "./news-shelf";
+import { testMemory, testNewsShelf } from "./test-memory";
 import { createWebApp } from "./web-app";
 
 // Mission Control's web process against a real Postgres. Signing in is Keycloak's job and has
@@ -29,6 +30,8 @@ const RAVI: Person = { subject: "ravi-id", email: "ravi@bramble.example", name: 
 let pool: Pool;
 let close: () => Promise<void>;
 let closeMemory: () => Promise<void>;
+let shelf: NewsShelf;
+let closeShelf: () => Promise<void>;
 let app: Express;
 let base: string;
 let server: ReturnType<Express["listen"]>;
@@ -56,7 +59,8 @@ before(async () => {
   ({ pool, close } = await testDatabase());
   const { memory, close: emptyMemory } = await testMemory();
   closeMemory = emptyMemory;
-  app = createWebApp({ pool, check, auth: { router: express.Router(), requirePerson }, hookSecrets: secrets, memory });
+  ({ shelf, close: closeShelf } = await testNewsShelf("https://mc.example"));
+  app = createWebApp({ pool, check, auth: { router: express.Router(), requirePerson }, hookSecrets: secrets, memory, news: shelf });
   app.use(handleErrors);
   server = app.listen(0);
   base = `http://localhost:${(server.address() as AddressInfo).port}`;
@@ -65,6 +69,7 @@ after(async () => {
   server.close();
   await close();
   await closeMemory();
+  await closeShelf();
 });
 beforeEach(() => {
   signedIn = null;
@@ -101,6 +106,29 @@ test("every route needs a signed-in person, except the health check and the sign
     else if (route.path.startsWith("/hooks/")) assert.equal(response.status, 401, `${route.method} ${route.path} took an unsigned notice.`);
     else assert.equal(response.status, 401, `${route.method} ${route.path} answered without a signed-in person.`);
   }
+});
+
+test("the news page shows a signed-in person their own company's editions, if they may see the news teammate", async () => {
+  const card = { headline: "Canals reopen", bullets: ["One.", "Two.", "Three."], whyItMatters: "Boats run again.", url: "https://example.org/canals", source: "Example News", topic: "Cities" };
+  await shelf.publish("bramble", { day: "2026-11-25", publishedAt: "2026-11-25T06:05:00.000Z", cards: [card] });
+
+  assert.equal((await call("/news/data/today.json")).status, 401);
+  signedIn = MEI;
+  const today = await call("/news/data/today.json");
+  assert.equal(today.status, 200);
+  assert.equal((await today.json()).cards[0].headline, "Canals reopen");
+  assert.deepEqual(asked.at(-1), { relation: "can_view", object: "teammate:bramble-news", context: undefined });
+  assert.equal((await call("/news/data/2026-11-01.json")).status, 404);
+  assert.equal((await call("/news/data/..%2Fsecrets.json")).status, 404);
+
+  refused.add("can_view");
+  assert.equal((await call("/news/data/today.json")).status, 403);
+  refused.clear();
+
+  // The page's files are relative to /news/, so the bare address moves there and keeps the day.
+  const bare = await fetch(`${base}/news?day=2026-11-25`, { redirect: "manual" });
+  assert.equal(bare.status, 302);
+  assert.equal(bare.headers.get("location"), "/news/?day=2026-11-25");
 });
 
 function signed(secret: string, body: string, id = randomUUID()) {

@@ -1,3 +1,5 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express, { type Express, type RequestHandler, type Router } from "express";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -14,10 +16,11 @@ import { rules, setRule } from "./policy";
 import { spendByDay } from "./spend";
 import { isToolName, TOOLS } from "./tools";
 import { INSTRUCTIONS, MAX_INSTRUCTIONS, type Memory } from "./memory";
+import type { NewsShelf } from "./news-shelf";
 
 // Mission Control's web process: the signed webhook handlers, and the API behind the board.
-// Every API route needs a signed-in person; only /healthz and /hooks/* do not, and the hooks
-// check a signature instead. Who may decide or configure is asked of OpenFGA on each request.
+// Every API route and the news page need a signed-in person; only /healthz and /hooks/* do not,
+// and the hooks check a signature instead. Who may decide or configure is asked of OpenFGA on each request.
 
 export type WebDeps = {
   pool: Pool;
@@ -27,7 +30,12 @@ export type WebDeps = {
   // Set when this deploy reads Gmail, whose notices come through Pub/Sub.
   googleHooks?: GoogleHooks;
   memory: Memory;
+  // The editions the news teammate published here, shown at /news/.
+  news: Pick<NewsShelf, "read">;
 };
+
+// The news page's own build, from npm --prefix news run build.
+const NEWS_PAGE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../news/dist");
 
 const TeammateId = z.string().min(1).max(100);
 const Decide = z.object({
@@ -63,6 +71,7 @@ export function createWebApp(deps: WebDeps): Express {
   app.use(express.json({ limit: "100kb" }));
   app.use("/api/auth", deps.auth.router);
   app.use("/api", deps.auth.requirePerson);
+  app.use("/news", deps.auth.requirePerson);
 
   const person = (request: express.Request): Person => request.person!;
 
@@ -83,6 +92,26 @@ export function createWebApp(deps: WebDeps): Express {
     const decides = who.roles.includes("approver") || who.roles.includes("admin");
     return decides ? "This amount is above what you can approve. Ask an admin." : "You can view approvals, but not decide them.";
   }
+
+  // The news page reads its editions here, relative to /news/. A person sees their own company's
+  // news, and only if they may see the news teammate.
+  app.get("/news/data/:file", async (request, response) => {
+    const who = person(request);
+    await requireTeammate(who, "news", "can_view");
+    const text = await deps.news.read(who.company, String(request.params.file));
+    if (text === null) throw new HttpError(404, "There is no such edition.");
+    response.set("Cache-Control", "no-cache").type("application/json").send(text);
+  });
+  // The page's files are relative, so /news must end in a slash.
+  app.use("/news", (request, response, next) => {
+    const [where, query] = request.originalUrl.split("?");
+    if (where === "/news") response.redirect(`/news/${query ? `?${query}` : ""}`);
+    else next();
+  });
+  app.use("/news", express.static(NEWS_PAGE));
+  app.use("/news", (_request, response) => {
+    response.status(404).send("There is no such news page.");
+  });
 
   app.get("/api/me", (request, response) => {
     const { name, email, company, roles, approvalLimit } = person(request);

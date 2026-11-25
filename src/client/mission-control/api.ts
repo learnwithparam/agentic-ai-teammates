@@ -99,7 +99,7 @@ export const OutboxMessage = z.object({
   id: z.string(),
   teammate: z.string(),
   runId: z.string().nullable(),
-  target: z.enum(["lmail.send", "github.publish"]),
+  target: z.enum(["lmail.send", "news.publish"]),
   title: z.string(),
   payload: z.unknown(),
   status: z.enum(["draft", "queued", "sending", "sent", "discarded", "dead"]),

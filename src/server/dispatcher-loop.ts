@@ -3,7 +3,7 @@ import type { Outbox } from "./outbox";
 
 // One step of the dispatcher: take the next message that is due, ask the gateway to send it,
 // and record what happened. The dispatcher holds only its gateway token; the gateway holds the
-// LMail and GitHub keys.
+// LMail key and, for news on GitHub, the GitHub token.
 
 export type Dispatched = { id: string; title: string; outcome: "sent" | "retry" | "dead"; reason?: string };
 

@@ -5,12 +5,13 @@ import { requireSettings, setting } from "./env";
 import { recordMember } from "./members";
 import { openFgaCheck } from "./permissions";
 import { Memory } from "./memory";
+import { NewsShelf } from "./news-shelf";
 import { createS3 } from "./s3";
 import { chosenServices, googleHooks } from "./services";
 import { createWebApp } from "./web-app";
 
-// Mission Control's web process. Start it with npm run web. It serves the board, its API and
-// the world apps' signed notices. It holds no model key and no world app key.
+// Mission Control's web process. Start it with npm run web. It serves the board, its API, the
+// news page and the world apps' signed notices. It holds no model key and no world app key.
 
 requireSettings([
   "APP_URL", "PORT", "DATABASE_URL", "OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_AUDIENCE",
@@ -33,11 +34,15 @@ const auth = await createAuth({
   onSignIn: (person) => recordMember(pool, person),
 });
 
-const memory = new Memory(createS3());
+const storage = createS3();
+const memory = new Memory(storage);
 await memory.ready();
+const news = new NewsShelf(storage, setting("APP_URL"));
+await news.ready();
 const app = createWebApp({
   pool,
   memory,
+  news,
   auth,
   check: openFgaCheck({
     apiUrl: setting("FGA_API_URL"),

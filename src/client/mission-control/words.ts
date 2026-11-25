@@ -42,7 +42,7 @@ export function reasonText(code: string): string {
 
 const TARGETS: Record<OutboxMessage["target"], string> = {
   "lmail.send": "Reply by mail",
-  "github.publish": "Publish the news",
+  "news.publish": "Publish the news",
 };
 
 export function targetLabel(target: OutboxMessage["target"]): string {

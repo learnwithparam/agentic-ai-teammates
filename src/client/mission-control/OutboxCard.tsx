@@ -22,7 +22,7 @@ function Preview({ message }: { message: OutboxMessage }) {
       </div>
     );
   }
-  const news = message.target === "github.publish" ? News.safeParse(message.payload) : null;
+  const news = message.target === "news.publish" ? News.safeParse(message.payload) : null;
   if (news?.success) {
     return (
       <ol className="flex list-decimal flex-col gap-1 rounded-md bg-muted py-2 pr-3 pl-8 text-sm">

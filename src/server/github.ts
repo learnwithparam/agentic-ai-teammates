@@ -1,16 +1,15 @@
 import { z } from "zod";
-import { Card } from "./tools";
+import type { Edition, NewsPublisher } from "./news-shelf";
 
-// Publishes a day of news cards to the news app in one commit, through GitHub's Git data API.
+// Publishes a day of news cards to a GitHub Pages site in one commit, through GitHub's Git data API.
+// It is the choice when NEWS_TARGET is github. One Pages site shows one company's news.
 // The Pages workflow deploys on each push to news/. The token is fine-grained: Contents read
 // and write on one repository, and only the gateway holds it.
 
 const DATA = "news/public/data";
 const Days = z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/));
 
-export type Edition = { day: string; publishedAt: string; cards: Card[] };
-
-export class GitHubPublisher {
+export class GitHubPublisher implements NewsPublisher {
   constructor(
     private readonly token: string,
     private readonly repository: string,
@@ -48,7 +47,7 @@ export class GitHubPublisher {
 
   // Writes the day's file, today.json and the list of days. Publishing the same edition twice
   // makes no second commit.
-  async publish(edition: Edition): Promise<{ commit: string | null; url: string }> {
+  async publish(_company: string, edition: Edition): Promise<{ commit: string | null; url: string }> {
     const { default_branch: branch } = await this.api<{ default_branch: string }>("");
     const ref = await this.api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(branch)}`);
     const parent = await this.api<{ tree: { sha: string } }>(`/git/commits/${ref.object.sha}`);

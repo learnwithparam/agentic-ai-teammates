@@ -11,7 +11,8 @@ import { deciders } from "./members";
 import { type Memory, notePath, vendorTopic } from "./memory";
 import { parseJsonText, payloadHash } from "./canonical";
 import { checkInvoice, type Invoice, type Reason, REASONS, PO_TOLERANCE } from "./checks";
-import { GitHubError, type GitHubPublisher } from "./github";
+import { GitHubError } from "./github";
+import type { NewsPublisher } from "./news-shelf";
 import { ArticleError, type readArticle } from "./news/article";
 import { NEWS_DESKS, type NewsDesk } from "./news/desk";
 import { editionProblems } from "./news/edition";
@@ -38,8 +39,8 @@ export type GatewayDeps = {
   mail: (company: string) => MailSource;
   files: FileSource;
   books: Accounting;
-  // Null when GITHUB_TOKEN and NEWS_REPO are not set. News then cannot publish, and says why.
-  publisher: GitHubPublisher | null;
+  // Mission Control's own news page, or a GitHub Pages site when NEWS_TARGET is github.
+  publisher: NewsPublisher;
   memory: Memory;
   // The news sources and the article reader. Both reach the public internet, so only the gateway runs them.
   news: { collect: (desk: NewsDesk) => ReturnType<typeof collectStories>; read: typeof readArticle };
@@ -410,7 +411,7 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       company: scope.company,
       teammate: scope.teammate,
       runId: scope.runId,
-      target: "github.publish",
+      target: "news.publish",
       title: `News for ${args.day}: ${args.cards.length} stories`,
       idempotencyKey: `news:${scope.company}:${args.day}:${payloadHash(args).slice(0, 16)}`,
       payload: args,
@@ -557,13 +558,9 @@ export function createGatewayApp(deps: GatewayDeps): Express {
         response.json(await deps.mail(body.company).send(mail, body.idempotencyKey));
         return;
       }
-      if (request.params.target === "github.publish") {
-        if (!deps.publisher) {
-          response.status(503).json({ error: "News cannot publish: set GITHUB_TOKEN and NEWS_REPO in .env, then restart the gateway.", retryable: false });
-          return;
-        }
+      if (request.params.target === "news.publish") {
         const edition = NewsPayload.parse(body.payload) as { day: string; cards: Card[] };
-        const published = await deps.publisher.publish({ day: edition.day, publishedAt: new Date().toISOString(), cards: edition.cards });
+        const published = await deps.publisher.publish(body.company, { day: edition.day, publishedAt: new Date().toISOString(), cards: edition.cards });
         for (const card of edition.cards) {
           await pool.query(
             "INSERT INTO news_published (company, url, day, headline) VALUES ($1, $2, $3, $4) ON CONFLICT (company, url) DO NOTHING",

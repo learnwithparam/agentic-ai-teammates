@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// The files the news teammate publishes next to this page: data/today.json, one data/<day>.json
+// The files the news teammate publishes next to this page, on GitHub Pages or Mission Control: data/today.json, one data/<day>.json
 // per edition, and data/days.json, the list of days, newest first.
 
 const Card = z.object({
@@ -21,8 +21,10 @@ const Days = z.array(z.iso.date());
 export class NoEdition extends Error {}
 
 async function getJson(path: string): Promise<unknown> {
-  const response = await fetch(path, { cache: "no-cache", signal: AbortSignal.timeout(15_000) });
+  // Asking for JSON means a lapsed Mission Control sign-in answers 401, not the sign-in page.
+  const response = await fetch(path, { cache: "no-cache", headers: { accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
   if (response.status === 404) throw new NoEdition("There is no news here yet.");
+  if (response.status === 401) throw new Error("Your sign-in has ended. Reload the page to sign in again.");
   if (!response.ok) throw new Error(`The news did not load (${response.status}).`);
   return response.json();
 }

@@ -89,9 +89,12 @@ function unusedFiles(files: Map<string, string>, bodies: Map<string, string>, tr
   return tracked.filter((path) => ruleFor(path) && !used.has(path)).map((path) => `${path}: nothing in use reads, links or calls it. Use it or delete it.`);
 }
 
+// Folders a build writes, so git never tracks them. Code may name them.
+const BUILT = ["news/dist"];
+
 function missingPaths(bodies: Map<string, string>, tracked: string[]): string[] {
   const problems: string[] = [];
-  const known = new Set(tracked.flatMap((path) => path.split("/").map((_, index, parts) => parts.slice(0, index + 1).join("/"))));
+  const known = new Set([...BUILT, ...tracked].flatMap((path) => path.split("/").map((_, index, parts) => parts.slice(0, index + 1).join("/"))));
   for (const [path, body] of bodies) {
     // Test fixtures name made-up paths on purpose.
     if (!CODE.test(basename(path)) || path.endsWith(".test.ts")) continue;

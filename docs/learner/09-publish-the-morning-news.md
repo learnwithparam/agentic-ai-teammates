@@ -8,11 +8,11 @@ So the model picks and writes, but plain code decides whether a card may go out.
 
 ## Goal
 
-You start an edition by hand and release it from the board. Then you read the cards on your own GitHub Pages site.
+You start an edition by hand and release it from the board. Then you read the cards on Mission Control's news page.
 
 ## Starting point
 
-The stack is running. You have forked this repo. You have set `NEWS_REPO` and `GITHUB_TOKEN` in `.env` as the README says. Pages is on, with GitHub Actions as the source.
+The stack is running and you can sign in to Mission Control. The news sources are public, so there is no key to set. An `EXA_API_KEY` in `.env` adds Exa as a source.
 
 ## How it works
 
@@ -31,14 +31,16 @@ The gateway checks the edition again before it takes it, in `editionProblems`.
 Every card must link to a story a source gave that day. No card may repeat an earlier edition or this one.
 
 The teammate starts quiet. So its edition waits as a draft on the board until a person releases it.
-The dispatcher then commits `news/public/data/<day>.json` and `today.json` to your fork, and the Pages workflow puts them live.
+The dispatcher then writes the day's cards to the stack's storage, in `src/server/news-shelf.ts`. Mission Control serves them at `/news/`, to people of that company who may see the news teammate.
+
+With `NEWS_TARGET=github` the dispatcher commits them to your fork of this repo instead. Its Pages workflow puts them live. The README says how to set that up.
 
 ```mermaid
 sequenceDiagram
   participant Graph as news graph
   participant Gateway
   participant Outbox
-  participant GitHub
+  participant Page as news page
   Graph->>Gateway: news.publish, five cards
   Gateway->>Gateway: every link was collected today?
   alt a card links to a story no source gave
@@ -47,7 +49,7 @@ sequenceDiagram
     Gateway->>Outbox: a draft, while the teammate is quiet
     Outbox-->>Gateway: waits for a person
     Note over Outbox: a person releases it on the board
-    Outbox->>GitHub: commit the day's cards
+    Outbox->>Page: the day's cards, stored
   end
 ```
 
@@ -63,7 +65,7 @@ docker exec teammates-platform-postgres-1 \
 The scheduler fires it within a few seconds. Watch the news card move through Working to the outbox as a draft.
 Open it, read the cards, and send it.
 
-A minute or two later, the Pages workflow on your fork finishes and the cards are live.
+Open http://localhost:8790/news/ and the cards are there.
 Swipe or use the arrow keys to move through the day.
 
 ![The news cards](../images/news.png)
@@ -86,4 +88,4 @@ The gateway's check is the last line between an invented link and the public pag
 
 - A daily news graph with two model calls and plain code around them.
 - A check that refuses any card the sources did not give.
-- An edition that waits for a person, then goes live on GitHub Pages.
+- An edition that waits for a person, then goes live on Mission Control's news page.

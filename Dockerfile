@@ -6,6 +6,8 @@ FROM node:24.22.3-trixie-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
+COPY news/package.json news/package-lock.json ./news/
+RUN npm ci --prefix news
 COPY . .
 RUN npm run build
 
@@ -18,4 +20,5 @@ COPY apps ./apps
 COPY src ./src
 COPY tsconfig.json ./
 COPY --from=build /app/dist/client ./dist/client
+COPY --from=build /app/news/dist ./news/dist
 USER node
