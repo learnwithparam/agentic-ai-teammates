@@ -44,7 +44,7 @@ export async function reminderMail(pool: Pool, company: Company, approvalId: str
     subject: `Still waiting: ${title}`,
     text: [
       "Hello,",
-      `"${title}" has waited ${hours} hours for a decision.`,
+      `"${title}" has waited ${hours <= 1 ? "about an hour" : `${hours} hours`} for a decision.`,
       ...(reasons.length ? [`It stopped because:\n${reasons.join("\n")}`] : []),
       "Open Mission Control to approve or deny it.",
       `${company.name} teammates`,
