@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "setup": "tsx scripts/setup.ts",
+    "google:consent": "tsx scripts/google-consent.ts",
     "infra:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d --wait",
     "langfuse:up": "docker compose -f langfuse/docker-compose.yml up -d --wait",
     "lmail": "tsx apps/lmail/main.ts",

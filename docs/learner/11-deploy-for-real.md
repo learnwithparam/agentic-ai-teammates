@@ -4,12 +4,15 @@
 
 On a laptop, the teammates sleep when the lid closes. An always-on teammate needs a machine that stays on.
 
+A real company's invoices also arrive in a real inbox, not the workshop's own.
+
 Moving to a server changes the addresses people open. Sign-in, the apps' notices and the board must all follow.
 If one address stays behind, notices go to a port nobody listens on. The work is then lost without a sound.
 
 ## Goal
 
 You run every process from one image, as on a server. Then you put a real domain with TLS in front of it.
+Last, you can point the invoice teammate at a real Gmail inbox and Google Drive.
 
 ## Starting point
 
@@ -81,6 +84,30 @@ Only its sign-in pages are public. For the admin console, open a tunnel from you
 ssh -L 8190:localhost:8190 you@your-server
 ```
 
+### Read a real Google account
+
+The invoice teammate can read Gmail and Google Drive instead of LMail and LDrive. It asks them the same questions, so the teammate does not change.
+QuirkBooks stays the books. One Google account serves one company.
+
+1. In the Google Cloud console, turn on the Gmail, Drive and Pub/Sub APIs.
+2. Make an OAuth client of the Desktop app kind. Put its id and secret in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+3. Run the consent script below and allow access. It writes `GOOGLE_REFRESH_TOKEN` into `.env` and never prints it.
+4. Make a Pub/Sub topic, and let `gmail-api-push@system.gserviceaccount.com` publish to it.
+5. Make a push subscription on that topic. Its address is your domain plus `/hooks/gmail/bramble`. Turn on authentication with a service account.
+6. Set `MAIL_SERVICE=gmail` and `FILE_SERVICE=gdrive`. Set `GMAIL_ADDRESS`, `GMAIL_PUBSUB_TOPIC` and `GMAIL_PUSH_SERVICE_ACCOUNT`.
+7. Set `HOOKS_URL` to your https domain, since Google must reach the hooks. Restart the processes.
+
+```bash
+npm run google:consent
+```
+
+Gmail's notice carries a token that Google signs. The web process checks three things.
+The token must be Google's, made for this hook's address, by the service account you named.
+Drive's notice carries the channel's secret token, as LDrive's does.
+
+Gmail takes no idempotency key, so the gateway keeps its own. A reply whose answer never came may have gone out.
+It is refused, never sent again, and the outbox shows why. Look in Sent before you send it again by hand.
+
 Keep two things safe. The `.env` file holds every secret. The Postgres and MinIO volumes hold every invoice, run and memory note.
 
 ## Break it
@@ -102,3 +129,4 @@ The gateway must move a watch when the hooks address changes. Otherwise an invoi
 - Every process from one image, restarted by Docker when it stops.
 - One door in, with TLS, and every other port closed to the internet.
 - Addresses that follow your domain, and watches that follow the hooks address.
+- The same teammate reading a real Gmail inbox and Drive, if you choose.

@@ -23,7 +23,9 @@ function worldApps() {
       return { historyId: "1", expiration: week() };
     },
   }) as unknown as MailSource;
+  let page = 0;
   const files = {
+    startPageToken: async () => `page-${(page += 1)}`,
     watch: async (address: string) => {
       channel += 1;
       calls.push(`drive ${address} -> channel-${channel}`);
@@ -62,4 +64,16 @@ test("a new hooks address moves every subscription and stops the old drive chann
   assert.ok(apps.calls.includes("stop channel-1"), apps.calls.join("\n"));
   const { rows } = await pool.query<{ address: string }>("SELECT DISTINCT address FROM subscriptions");
   assert.ok(rows.every((row) => row.address.startsWith("http://localhost:8790/")));
+});
+
+test("Gmail and Google Drive keep the cursor of their first watch through every renewal", async () => {
+  const apps = worldApps();
+  const services = { mail: "gmail", files: "gdrive" } as const;
+  await renewWatches({ pool, hooksUrl: "https://t.example", ...apps, services });
+  await renewWatches({ pool, hooksUrl: "https://moved.example", ...apps, services });
+  const { rows } = await pool.query<{ source: string; start_cursor: string; address: string }>("SELECT source, start_cursor, address FROM subscriptions ORDER BY source");
+  assert.deepEqual(rows, [
+    { source: "gdrive:bramble", start_cursor: "page-1", address: "https://moved.example/hooks/gdrive/bramble" },
+    { source: "gmail:bramble", start_cursor: "1", address: "https://moved.example/hooks/gmail/bramble" },
+  ]);
 });

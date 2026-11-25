@@ -6,6 +6,7 @@ import { recordMember } from "./members";
 import { openFgaCheck } from "./permissions";
 import { Memory } from "./memory";
 import { createS3 } from "./s3";
+import { chosenServices, googleHooks } from "./services";
 import { createWebApp } from "./web-app";
 
 // Mission Control's web process. Start it with npm run web. It serves the board, its API and
@@ -45,6 +46,7 @@ const app = createWebApp({
     modelId: setting("FGA_MODEL_ID"),
   }),
   hookSecrets: { lmail: setting("LMAIL_WEBHOOK_SECRET"), ldrive: setting("LDRIVE_WEBHOOK_SECRET") },
+  googleHooks: googleHooks(chosenServices()),
 });
 servePage(app, "mission-control");
 

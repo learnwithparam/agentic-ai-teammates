@@ -9,7 +9,8 @@
 
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { setEnv as writeEnv } from "./env-file";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CredentialsMethod, OpenFgaClient } from "@openfga/sdk";
@@ -36,15 +37,7 @@ const secret = () => randomBytes(24).toString("base64url");
 // Standard Webhooks secrets are "whsec_" and base64 of the key bytes.
 const webhookSecret = () => `whsec_${randomBytes(32).toString("base64")}`;
 
-function setEnv(values: Record<string, string>, file = envFile) {
-  const lines = existsSync(file) ? readFileSync(file, "utf8").split("\n") : [];
-  for (const [name, value] of Object.entries(values)) {
-    const at = lines.findIndex((line) => line.startsWith(`${name}=`));
-    if (at >= 0) lines[at] = `${name}=${value}`;
-    else lines.splice(lines.at(-1) === "" ? lines.length - 1 : lines.length, 0, `${name}=${value}`);
-  }
-  writeFileSync(file, `${lines.join("\n").replace(/\n*$/, "")}\n`, { mode: 0o600 });
-}
+const setEnv = (values: Record<string, string>, file = envFile) => writeEnv(values, file);
 
 // Reads a settings file and returns a want() that keeps a value already there or makes a new one.
 function settingsFile(file: string) {

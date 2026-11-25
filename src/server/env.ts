@@ -59,6 +59,14 @@ const SETTINGS = {
   QUIRKBOOKS_CLIENT_SECRET: "QuirkBooks' Keycloak client secret. npm run setup writes it.",
   GITHUB_TOKEN: "A fine-grained GitHub token with Contents read and write on NEWS_REPO only.",
   NEWS_REPO: "The GitHub repository the news cards publish to, as owner/name: your fork of this repo.",
+  MAIL_SERVICE: "Optional. Where invoice mail arrives: lmail, the workshop's own mail, or gmail. Leave it out for lmail.",
+  FILE_SERVICE: "Optional. Where invoice files arrive: ldrive, the workshop's own drive, or gdrive. Leave it out for ldrive.",
+  GOOGLE_CLIENT_ID: "For gmail or gdrive. The OAuth client id from console.cloud.google.com, APIs and services, Credentials.",
+  GOOGLE_CLIENT_SECRET: "For gmail or gdrive. That OAuth client's secret.",
+  GOOGLE_REFRESH_TOKEN: "For gmail or gdrive. npm run google:consent prints it after you allow access.",
+  GMAIL_ADDRESS: "For gmail. The Gmail address the accounts team reads, the one you allowed access as.",
+  GMAIL_PUBSUB_TOPIC: "For gmail. The Pub/Sub topic Gmail publishes to, as projects/<project>/topics/<topic>.",
+  GMAIL_PUSH_SERVICE_ACCOUNT: "For gmail. The service account the Pub/Sub push subscription signs its tokens as.",
   EXA_API_KEY: "Optional. An Exa key, from dashboard.exa.ai, turns on Exa as a news source.",
 } as const;
 

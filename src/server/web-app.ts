@@ -5,7 +5,7 @@ import { createApp, HttpError } from "../../apps/shared/server";
 import { Approvals } from "./approvals";
 import { conversation, MAX_MESSAGE, say } from "./conversation";
 import type { Person } from "./auth";
-import { createHooksRouter } from "./hooks";
+import { createHooksRouter, type GoogleHooks } from "./hooks";
 import { Inbox } from "./inbox";
 import { Outbox } from "./outbox";
 import { COMPANIES } from "./people";
@@ -24,6 +24,8 @@ export type WebDeps = {
   check: Check;
   auth: { router: Router; requirePerson: RequestHandler };
   hookSecrets: { lmail: string; ldrive: string };
+  // Set when this deploy reads Gmail, whose notices come through Pub/Sub.
+  googleHooks?: GoogleHooks;
   memory: Memory;
 };
 
@@ -57,7 +59,7 @@ export function createWebApp(deps: WebDeps): Express {
   const app = createApp("mission-control");
 
   // The hooks read their own raw body to check its signature, so they come before express.json.
-  app.use(createHooksRouter({ pool, inbox, secrets: deps.hookSecrets }));
+  app.use(createHooksRouter({ pool, inbox, secrets: deps.hookSecrets, google: deps.googleHooks }));
   app.use(express.json({ limit: "100kb" }));
   app.use("/api/auth", deps.auth.router);
   app.use("/api", deps.auth.requirePerson);
