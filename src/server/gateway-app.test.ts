@@ -510,7 +510,7 @@ test("a model can never read reported.md whole: the core reads one person's line
 
 // The weekly tidy proposes a note's new lines. Even a teammate that is not quiet writes a draft.
 // The note changes when a person sends it, to exactly the lines they read.
-test("a tidy is always a draft, and sending it replaces the note with the lines a person read", async () => {
+test("a tidy is always a draft, refused once its note changes, and otherwise replaces the note", async () => {
   const before = await pool.query<{ quiet: boolean }>("SELECT quiet FROM teammates WHERE company = 'bramble' AND id = 'invoices'");
   await pool.query("UPDATE teammates SET quiet = false WHERE company = 'bramble' AND id = 'invoices'");
   const runId = await startRun("invoices");
@@ -523,11 +523,21 @@ test("a tidy is always a draft, and sending it replaces the note with the lines 
   assert.equal(rows[0].status, "draft");
   assert.equal(rows[0].target, "memory.tidy");
   assert.match(await memory.read(mates, "notes/vendor-tidy.md") ?? "", /NL01/);
-  const response = await fetch(`${base}/dispatch/memory.tidy`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${DISPATCHER}` },
-    body: JSON.stringify({ company: "bramble", idempotencyKey: rows[0].idempotency_key, payload: rows[0].payload }),
-  });
+  const send = (row: { idempotency_key: string; payload: unknown }) =>
+    fetch(`${base}/dispatch/memory.tidy`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${DISPATCHER}` },
+      body: JSON.stringify({ company: "bramble", idempotencyKey: row.idempotency_key, payload: row.payload }),
+    });
+  // A line written after the tidy read the note is never lost: the old draft is refused.
+  await memory.addLine(mates, "vendor-tidy", "Ada paid Lumen on 2 December.");
+  const stale = await send(rows[0]);
+  assert.equal(stale.status, 409, await stale.clone().text());
+  assert.match(await memory.read(mates, "notes/vendor-tidy.md") ?? "", /2 December/);
+  const again = await callTool("memory.propose_tidy", { ...scope, args: { topic: "vendor-tidy", lines, why: "The old account was replaced." } });
+  assert.notEqual(again.result.outboxId, proposed.result.outboxId);
+  const fresh = await pool.query("SELECT idempotency_key, payload FROM outbox WHERE id = $1", [again.result.outboxId]);
+  const response = await send(fresh.rows[0]);
   assert.equal(response.status, 200, await response.clone().text());
   assert.equal(await memory.read(mates, "notes/vendor-tidy.md"), "- Lumen moved to NL02, confirmed by Ada.\n");
   await pool.query("UPDATE teammates SET quiet = $1 WHERE company = 'bramble' AND id = 'invoices'", [before.rows[0].quiet]);

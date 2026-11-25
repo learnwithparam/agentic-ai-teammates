@@ -7,8 +7,8 @@ import { createApp, HttpError } from "../../apps/shared/server";
 import { ServiceError } from "./adapters/http";
 import type { Accounting, FileSource, MailSource } from "./adapters/types";
 import { Approvals } from "./approvals";
-import { type Memory } from "./memory";
-import { parseJsonText } from "./canonical";
+import { type Memory, notePath } from "./memory";
+import { parseJsonText, payloadHash } from "./canonical";
 import { GitHubError } from "./github";
 import type { NewsPublisher } from "./news-shelf";
 import { type readArticle } from "./news/article";
@@ -87,6 +87,7 @@ const TidyPayload = z.object({
   teammate: z.string().min(1),
   topic: z.string().min(1),
   lines: z.array(z.string()),
+  before: z.string().min(1),
 });
 const MailPayload = z.object({
   to: z.email(),
@@ -322,7 +323,10 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       if (request.params.target === "memory.tidy") {
         // A person sent the weekly tidy's draft, so the note takes the lines they read.
         const tidy = TidyPayload.parse(body.payload);
-        await memory.replaceNote({ company: body.company, teammate: tidy.teammate }, tidy.topic, tidy.lines);
+        const scope = { company: body.company, teammate: tidy.teammate };
+        const now = payloadHash((await memory.read(scope, notePath(tidy.topic))) ?? "");
+        if (now !== tidy.before) throw new HttpError(409, "The note changed after this tidy was written, so it was not applied. The next tidy reads it again.");
+        await memory.replaceNote(scope, tidy.topic, tidy.lines);
         response.json({ replaced: `notes/${tidy.topic}.md`, lines: tidy.lines.length });
         return;
       }

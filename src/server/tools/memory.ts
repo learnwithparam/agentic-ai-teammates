@@ -67,14 +67,17 @@ export const memoryTools = {
     run: async (ctx, args) => {
       const { scope } = ctx;
       const lines = args.lines.map((line) => safeLine(line, 300));
+      // What the note held when the tidy read it. If it changes before a person sends the draft,
+      // the draft is refused, so a line written in between is never lost.
+      const before = payloadHash((await ctx.deps.memory.read(scope, notePath(args.topic))) ?? "");
       const { message } = await ctx.outbox.add({
         company: scope.company,
         teammate: scope.teammate,
         runId: scope.runId,
         target: "memory.tidy",
         title: `Tidy notes/${args.topic}.md: ${safeLine(args.why, 120)}`.slice(0, 200),
-        idempotencyKey: `tidy:${scope.teammate}:${args.topic}:${payloadHash(lines)}`,
-        payload: { teammate: scope.teammate, topic: args.topic, lines, why: safeLine(args.why, 300) },
+        idempotencyKey: `tidy:${scope.teammate}:${args.topic}:${payloadHash({ lines, before })}`,
+        payload: { teammate: scope.teammate, topic: args.topic, lines, why: safeLine(args.why, 300), before },
         status: "draft",
       });
       return { status: "done", result: { outboxId: message.id } };
