@@ -290,6 +290,7 @@ export function createWebApp(deps: WebDeps): Express {
     const lastRuns = (name: string) => ran.rows.filter((row) => row.timer === name).slice(0, 5).map(({ timer: _timer, ...run }) => run);
     const mine = (row: { payload: { person?: string | null } }) => admin || row.payload.person === who.email;
     response.json({
+      timezone: COMPANIES[who.company].timezone,
       schedules: rows.filter((row) => row.cron).map((row) => ({
         name: row.name, label: labels.get(row.name) ?? row.name, when: cronWords(row.cron), nextAt: row.fire_at, lastAt: row.last_fired_at, runs: lastRuns(row.name),
       })),

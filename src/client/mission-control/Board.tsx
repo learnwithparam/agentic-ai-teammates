@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
 import type { Board as BoardData, InboxEvent, SignedIn, Run, Teammate } from "./api";
 import { ApprovalCard } from "./ApprovalCard";
+import { needsYou } from "./needs-you";
 import { OutboxCard } from "./OutboxCard";
 import { Tone } from "./Tone";
 import { duration, eventLabel, formatSpend, sourceLabel, STOP_REASONS, when } from "./words";
 
-// Four columns, left to right, the way work moves: it arrives, a teammate works on it, it waits
-// for a person or it is done. "Needs you" is the one column a person acts in, so it is marked, and
-// on a phone it comes first.
+// One teammate's work in four columns, left to right, the way work moves: it arrives, the teammate
+// works on it, it waits for a person or it is done. "Needs you" is the one column a person acts
+// in, so it is marked, and on a phone it comes first. Its oldest card is at the top.
 
 const DONE_SHOWN = 25;
 
@@ -61,16 +62,14 @@ function RunCard({ run, teammates, onOpen }: { run: Run; teammates: Teammate[]; 
   );
 }
 
-export function Board({ board, me, teammate, onOpenRun, refresh }: { board: BoardData; me: SignedIn; teammate: string | null; onOpenRun: (id: string) => void; refresh: () => void }) {
-  const mine = <T extends { teammate: string }>(rows: T[]) => (teammate ? rows.filter((row) => row.teammate === teammate) : rows);
+export function Board({ board, me, teammate, onOpenRun, refresh }: { board: BoardData; me: SignedIn; teammate: string; onOpenRun: (id: string) => void; refresh: () => void }) {
+  const mine = <T extends { teammate: string }>(rows: T[]) => rows.filter((row) => row.teammate === teammate);
   const arrived = mine(board.inbox).filter((event) => event.status === "queued" || event.status === "dead");
   const working = mine(board.runs).filter((run) => run.status === "running");
-  const approvals = mine(board.approvals).filter((approval) => approval.status === "pending");
-  const drafts = mine(board.outbox).filter((message) => message.status === "draft");
+  const waiting = needsYou(board, teammate);
   const done = mine(board.runs)
     .filter((run) => run.status === "finished")
     .slice(0, DONE_SHOWN);
-  const admin = me.roles.includes("admin");
 
   return (
     <div className="flex h-full snap-x snap-mandatory gap-3 overflow-x-auto p-3 xl:grid xl:grid-cols-[1fr_1fr_1.35fr_1fr] xl:overflow-x-visible">
@@ -79,18 +78,13 @@ export function Board({ board, me, teammate, onOpenRun, refresh }: { board: Boar
           <EventCard key={event.id} event={event} teammates={board.teammates} />
         ))}
       </Column>
-      <Column title="Working" count={working.length} empty="No teammate is working right now.">
+      <Column title="Working" count={working.length} empty="It is not working right now.">
         {working.map((run) => (
           <RunCard key={run.id} run={run} teammates={board.teammates} onOpen={() => onOpenRun(run.id)} />
         ))}
       </Column>
-      <Column title="Needs you" count={approvals.length + drafts.length} marked empty="Nothing needs you. Teammates ask here when a check fails.">
-        {approvals.map((approval) => (
-          <ApprovalCard key={approval.id} approval={approval} me={me} onDecided={refresh} onOpenRun={onOpenRun} />
-        ))}
-        {drafts.map((message) => (
-          <OutboxCard key={message.id} message={message} canRelease={admin} onDone={refresh} />
-        ))}
+      <Column title="Needs you" count={waiting.length} marked empty="Nothing needs you. It asks here when a check fails.">
+        <WaitingCards items={waiting} me={me} onDone={refresh} onOpenRun={onOpenRun} />
       </Column>
       <Column title="Done" count={done.length} empty="Finished runs show here.">
         {done.map((run) => (
@@ -100,3 +94,17 @@ export function Board({ board, me, teammate, onOpenRun, refresh }: { board: Boar
     </div>
   );
 }
+
+// The cards a person acts on, in the order given. Home and a teammate's Work tab both use it.
+export function WaitingCards({ items, me, onDone, onOpenRun }: { items: ReturnType<typeof needsYou>; me: SignedIn; onDone: () => void; onOpenRun: (id: string) => void }) {
+  const admin = me.roles.includes("admin");
+  return items.map((item) =>
+    item.kind === "approval" ? (
+      <ApprovalCard key={item.approval.id} approval={item.approval} me={me} onDecided={onDone} onOpenRun={onOpenRun} />
+    ) : (
+      <OutboxCard key={item.message.id} message={item.message} canRelease={admin} onDone={onDone} />
+    ),
+  );
+}
+
+export { RunCard };

@@ -24,6 +24,8 @@ const ACTIONS: Record<string, string> = {
   "rule.changed": "Changed a rule",
   "outbox.released": "Sent a draft",
   "outbox.discarded": "Threw away a draft",
+  "follow_up.cancelled": "Cancelled a follow-up",
+  "note.deleted": "Deleted a note",
 };
 
 function OutboxTable({ outbox, teammates }: { outbox: OutboxMessage[]; teammates: Teammate[] }) {

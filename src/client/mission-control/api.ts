@@ -229,7 +229,7 @@ const FollowUp = z.object({
   setAt: z.string(),
   askedBy: z.string().nullable(),
 });
-export const TeammateTimers = z.object({ schedules: z.array(Schedule), followUps: z.array(FollowUp) });
+export const TeammateTimers = z.object({ timezone: z.string(), schedules: z.array(Schedule), followUps: z.array(FollowUp) });
 export type TeammateTimers = z.infer<typeof TeammateTimers>;
 
 // What a teammate remembers. full is false for someone who may only view it: they read its instructions.

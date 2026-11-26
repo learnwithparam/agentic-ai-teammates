@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { axisTicks, tokensRead, volumeLine } from "./words";
+import { axisTicks, onClock, tokensRead, volumeLine, waitingSince, workingDaysSince } from "./words";
 
 test("the spend axis steps in round amounts and reaches past the highest day", () => {
   // The live chart once read $0, $0.0070, $0.01, $0.02 because its steps were 0.0075 apart.
@@ -27,4 +27,18 @@ test("the Quiet switch says what the teammate wrote, leaving out what it did not
   const none = { days: 14, onItsOwn: 0, released: 0, discarded: 0, waiting: 0 };
   assert.equal(volumeLine(none), "It has written nothing in the last 14 days.");
   assert.equal(volumeLine({ ...none, released: 3, discarded: 1 }), "In the last 14 days: 3 sent by a person, 1 thrown away.");
+});
+
+test("a card says how long it has waited once three working days have passed", () => {
+  const thursday = new Date("2026-11-26T10:00:00");
+  assert.equal(workingDaysSince("2026-11-24T09:00:00", thursday), 2);
+  assert.equal(waitingSince("2026-11-24T09:00:00", thursday), null);
+  assert.equal(waitingSince("2026-11-23T09:00:00", thursday), "Waiting since Mon 23 Nov");
+  // A weekend does not count, so Friday's card is not old on Tuesday.
+  assert.equal(workingDaysSince("2026-11-20T16:00:00", new Date("2026-11-24T10:00:00")), 2);
+});
+
+test("a schedule's next time reads on the company's clock, whatever the reader's clock", () => {
+  assert.equal(onClock("2026-11-27T08:00:00Z", "Europe/Amsterdam"), "Fri 27 Nov, 09:00");
+  assert.equal(onClock("2026-11-27T08:00:00Z", "Asia/Kolkata"), "Fri 27 Nov, 13:30");
 });

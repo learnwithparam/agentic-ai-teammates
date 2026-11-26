@@ -111,3 +111,31 @@ export function axisTicks(highest: number): number[] {
   for (let tick = 0; tick < highest + step; tick += step) ticks.push(Number(tick.toPrecision(6)));
   return ticks;
 }
+
+const STALE_AFTER = 3;
+const dayName = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
+
+// Working days that ended since a card arrived: Monday to Friday, not counting its own day.
+export function workingDaysSince(iso: string, now = new Date()): number {
+  const day = new Date(iso);
+  day.setHours(12, 0, 0, 0);
+  const today = new Date(now);
+  today.setHours(12, 0, 0, 0);
+  let count = 0;
+  for (day.setDate(day.getDate() + 1); day <= today; day.setDate(day.getDate() + 1)) {
+    if (day.getDay() !== 0 && day.getDay() !== 6) count += 1;
+  }
+  return count;
+}
+
+// "Waiting since Tue 24 Nov" once a card has waited three working days, so an old one stands out.
+export function waitingSince(iso: string, now = new Date()): string | null {
+  return workingDaysSince(iso, now) >= STALE_AFTER ? `Waiting since ${dayName.format(new Date(iso))}` : null;
+}
+
+// A time on the company's clock with its day, "Fri 27 Nov, 09:00", the clock a schedule is set in.
+export function onClock(iso: string, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(iso));
+  const part = (type: string) => parts.find((each) => each.type === type)?.value ?? "";
+  return `${part("weekday")} ${part("day")} ${part("month")}, ${part("hour")}:${part("minute")}`;
+}

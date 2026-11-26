@@ -2,7 +2,8 @@ import { useState } from "react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { ApiError, type OutboxMessage, post } from "./api";
-import { targetLabel, when } from "./words";
+import { Tone } from "./Tone";
+import { targetLabel, waitingSince, when } from "./words";
 
 // A message a quiet teammate wrote and did not send. A person reads it here, then sends it
 // or throws it away. Sending hands it to the dispatcher, which paces and retries it.
@@ -71,8 +72,9 @@ export function OutboxCard({ message, canRelease, onDone }: { message: OutboxMes
   return (
     <article className="flex flex-col gap-3 rounded-lg border bg-card p-4">
       <header>
-        <p className="text-xs text-muted-foreground">
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {targetLabel(message.target)}, written {when(message.createdAt)}
+          {waitingSince(message.createdAt) && <Tone tone="wait">{waitingSince(message.createdAt)}</Tone>}
         </p>
         <h3 className="font-display text-base leading-snug font-semibold">{message.title}</h3>
       </header>

@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, type Decision, get, Instructions, type SignedIn, post, Rules, type Teammate } from "./api";
+import { Section } from "./Section";
 import { volumeLine } from "./words";
 
 // How one teammate behaves. Only an admin changes it; everyone else reads it. Every change here
@@ -21,16 +22,6 @@ const FIXED_TOOLS = new Set(["books.post_bill"]);
 
 function problemText(error: unknown) {
   return error instanceof ApiError ? error.message : "That did not save. Try again.";
-}
-
-function Section({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border bg-card p-4">
-      <h2 className="font-display text-base font-semibold">{title}</h2>
-      <p className="mb-4 text-sm text-muted-foreground">{hint}</p>
-      {children}
-    </section>
-  );
 }
 
 function Behaviour({ teammate, admin, onSaved }: { teammate: Teammate; admin: boolean; onSaved: () => void }) {

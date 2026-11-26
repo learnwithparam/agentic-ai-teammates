@@ -95,10 +95,17 @@ test("after the last allowed attempt the message is dead, with the last reason",
 });
 
 test("two sends to one target are spaced out, so the second waits its turn", async () => {
-  await queue();
-  await queue();
-  const gateway = answers({ id: "a" }, { id: "b" });
-  assert.equal((await dispatchOnce(outbox, gateway))?.outcome, "sent");
-  assert.equal(await dispatchOnce(outbox, gateway), null);
-  assert.equal(gateway.keys.length, 1);
+  // A minute of spacing, so a slow machine never takes longer than the gap between the two sends.
+  const spacing = OUTBOX_SETTINGS.spacingMs;
+  OUTBOX_SETTINGS.spacingMs = 60_000;
+  try {
+    await queue();
+    await queue();
+    const gateway = answers({ id: "a" }, { id: "b" });
+    assert.equal((await dispatchOnce(outbox, gateway))?.outcome, "sent");
+    assert.equal(await dispatchOnce(outbox, gateway), null);
+    assert.equal(gateway.keys.length, 1);
+  } finally {
+    OUTBOX_SETTINGS.spacingMs = spacing;
+  }
 });

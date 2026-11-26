@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { type Approval, ApiError, type SignedIn, post } from "./api";
 import { Tone } from "./Tone";
-import { formatMoney, reasonText, when } from "./words";
+import { formatMoney, reasonText, waitingSince, when } from "./words";
 
 // One call a teammate may not make alone. The card shows why it stopped, in the checks' own
 // sentences, and what it read. The person who clicks is the one signed in; the server checks
@@ -86,7 +86,10 @@ export function ApprovalCard({ approval, me, onDecided, onOpenRun }: { approval:
     <article className="flex flex-col gap-3 rounded-lg border border-foreground/15 bg-card p-4 shadow-[0_1px_0_var(--border)] data-[pending=true]:border-l-4 data-[pending=true]:border-l-accent-foreground" data-pending={pending}>
       <header className="flex flex-wrap-reverse items-start justify-between gap-x-3 gap-y-1">
         <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">{approval.label}</p>
+          <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {approval.label}
+            {pending && waitingSince(approval.createdAt) && <Tone tone="wait">{waitingSince(approval.createdAt)}</Tone>}
+          </p>
           <h3 className="font-display text-base leading-snug font-semibold">{approval.title}</h3>
         </div>
         <p className="font-display text-lg font-semibold tabular-nums">{formatMoney(approval.amount, approval.currency)}</p>
