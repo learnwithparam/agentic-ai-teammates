@@ -7,7 +7,11 @@ You build three teammates:
 
 - **The invoice teammate** reads invoices from LMail and LDrive and posts bills to QuirkBooks. When every check tallies, it posts on its own. When one fails, it waits for your approval. For example, an invoice whose bank details differ from the vendor's record never posts on its own.
 - **The news teammate** reads RSS feeds, Hacker News and GDELT each morning. Exa joins when you give it a key. It picks the stories that matter to a design studio and publishes them as swipe cards.
-- **The payments teammate** finds the bills due each working morning. It asks a person to approve one pay run. It never pays a bill whose vendor's bank details changed after it was posted.
+- **The payments teammate** finds the bills due each working morning. It asks a person to approve one pay run. It never pays a bill whose vendor's bank details changed after it was posted. Paying records the payment in QuirkBooks, and no bank money moves.
+
+The teammates also hand work to each other. The invoice teammate may post a bill due within five days. Then it asks the payments teammate to run today. A person still approves every pay run.
+
+Each teammate has its own page in Mission Control. Work shows its cards, Schedule shows what it does next, and Memory shows what it keeps.
 
 The design follows the five parts of [Building always-on agents](https://claude.com/resources/articles/building-always-on-agents): inbox, timers, memory, permissions and outbox.
 

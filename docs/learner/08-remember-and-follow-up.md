@@ -72,9 +72,17 @@ docker exec teammates-platform-postgres-1 \
 You see the standing schedules and one `remind:` timer a day ahead.
 Approve the invoice and run the query again. The reminder's status is now `cancelled`.
 
+You do not need psql to see this. In Mission Control, click Invoice teammate in the sidebar, then the Schedule tab. It lists the same timers, each with its next time. A follow-up shows who asked for it, and they can cancel it there.
+
+![The invoice teammate's Schedule tab](../images/mc-schedule.png)
+
 Open Settings as Ada. Add a line to the invoice teammate's instructions. For example: Copperleaf bills in US dollars. The next run reads it.
 
 ![Settings with the teammate's instructions](../images/mc-settings.png)
+
+Now open the Memory tab. It shows the instructions and every note the teammate keeps. Ada can delete a wrong note. Sign in as Mei: she sees the instructions only, because a viewer never reads the notes.
+
+![The invoice teammate's Memory tab](../images/mc-memory.png)
 
 ## Break it
 

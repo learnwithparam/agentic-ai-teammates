@@ -56,6 +56,16 @@ sequenceDiagram
   end
 ```
 
+### Two teammates working together
+
+A bill can fall due before the next pay run. So the invoice teammate checks each bill it posts. If one falls due within five days, it asks the payments teammate to run today. It calls `team.ask_teammate`, and the ask lands in Payments' inbox as a `teammate.request` event.
+
+Two lists must agree before an ask goes through. The invoice teammate lists `team.ask_teammate` in its tools. The payments teammate names `invoice` in `takesAsksFrom`. If either list is missing, the gateway refuses the ask.
+
+The ask moves no money. Payments starts the day's pay run, checks every bill again, and a person still approves the card. Paying records the payment in QuirkBooks. No bank money moves in this workshop.
+
+![The pay run card after the invoice teammate's ask](../images/mc-pay-run.png)
+
 ## Run it
 
 The pay run fires at nine on working mornings. To start it now, move its timer:
@@ -99,6 +109,18 @@ The guard's sum check keeps the card honest. Without it, a small number on the c
 
    ```text
    "a pay run is refused unless every bill may be paid and the total is the books' own sum"
+   ```
+
+4. Put it back. It passes.
+
+The hand-off has its own guard: the two lists must agree.
+
+1. Open `src/server/teammates/invoice/teammate.ts` and find `"team.ask_teammate",` in its tools.
+2. Delete that line.
+3. Run `npx tsx --test src/server/teammates/registry.test.ts`. This test in `src/server/teammates/registry.test.ts` fails:
+
+   ```text
+   "every kind a teammate takes asks from exists and may ask, and every teammate that asks has someone to ask"
    ```
 
 4. Put it back. It passes.

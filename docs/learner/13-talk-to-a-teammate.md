@@ -95,6 +95,8 @@ docker exec teammates-platform-postgres-1 \
   psql -U teammates -d teammates -c "SELECT name, fire_at FROM timers WHERE name LIKE 'follow:%' AND status = 'waiting'"
 ```
 
+You can also see it in Mission Control. Open Invoice teammate, then the Schedule tab. The follow-up is there with its time, and only Ravi sees it. Click Cancel follow-up, and the timer is gone. Only the person who asked, or an admin, may cancel it.
+
 Send a second question, then open its run on the board. The drawer's tokens line ends with how many were read from the cache.
 
 ## Break it
