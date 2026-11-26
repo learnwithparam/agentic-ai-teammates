@@ -36,7 +36,9 @@ const ENV_FILE = "src/server/env.ts";
 const CLI_FOLDER = "src/client/components/ui/";
 const COLOUR_FILE = "src/client/styles/app.css";
 const COLOUR = /#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|oklch)\(/i;
-const TEXT = /\.(ts|tsx|mjs|js|md|json|ya?ml|sh|html|css)$/;
+const TEXT = /\.(ts|tsx|mjs|js|md|json|ya?ml|sh|html|css)$|^\.node-version$/;
+const NODE_PIN = ".node-version";
+const WORKFLOW = /^\.github\/workflows\/.+\.ya?ml$/;
 
 function stripComments(path: string, body: string): string {
   if (/\.(ts|tsx|mjs|js)$/.test(path)) return body.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
@@ -167,10 +169,28 @@ function composeProblems(files: Map<string, string>): string[] {
   return problems;
 }
 
+// CI runs one exact Node, named in .node-version. A range lets the runner pick any Node it has
+// cached, so two runs of one workflow can differ. On 26 Nov 2026 one run got Node 26. Its npm
+// skipped the install script of puppeteer, so Chrome never arrived and every diagram failed.
+function nodePinProblems(files: Map<string, string>): string[] {
+  const problems: string[] = [];
+  const pin = files.get(NODE_PIN);
+  if (pin === undefined) problems.push(`${NODE_PIN}: missing. CI needs one exact Node version, such as 24.22.3.`);
+  else if (!/^\d+\.\d+\.\d+\n?$/.test(pin)) problems.push(`${NODE_PIN}: says "${pin.trim()}". Write one exact version, such as 24.22.3.`);
+  for (const [path, body] of files) {
+    if (!WORKFLOW.test(path) || !body.includes("actions/setup-node")) continue;
+    const versions = [...body.matchAll(/^\s*(node-version(?:-file)?):\s*(\S+)/gm)].map((match) => `${match[1]}: ${match[2]}`);
+    if (versions.length === 0 || versions.some((line) => line !== `node-version-file: ${NODE_PIN}`)) {
+      problems.push(`${path}: sets up Node with "${versions.join(", ") || "no version"}". Use "node-version-file: ${NODE_PIN}", so every run gets the same Node.`);
+    }
+  }
+  return problems;
+}
+
 export function findProblems(files: Map<string, string>, tracked: string[]): string[] {
   const bodies = new Map([...files].map(([path, body]) => [path, stripComments(path, body)]));
   const fileProblems = [...unusedFiles(files, bodies, tracked), ...missingPaths(bodies, tracked)];
-  return [...fileProblems, ...manifestProblems(files), ...productionProblems(files, bodies), ...composeProblems(files)];
+  return [...fileProblems, ...manifestProblems(files), ...productionProblems(files, bodies), ...composeProblems(files), ...nodePinProblems(files)];
 }
 
 function main() {
@@ -183,7 +203,7 @@ function main() {
     console.error(problems.join("\n"));
     process.exit(1);
   }
-  console.log("check-repo: every watched file and npm script is in use, every named path exists, every dependency is pinned, app code has no stand-ins and reads settings in one place, every compose file has its own project name");
+  console.log("check-repo: every watched file and npm script is in use, every named path exists, every dependency is pinned, app code has no stand-ins and reads settings in one place, every compose file has its own project name, CI runs the one Node in .node-version");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

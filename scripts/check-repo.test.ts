@@ -5,7 +5,7 @@ import { findProblems } from "./check-repo";
 const manifest = JSON.stringify({ engines: { node: ">=26" }, dependencies: { zod: "4.6.7" }, scripts: {} });
 
 function problemsFor(extra: Record<string, string>) {
-  const files = new Map<string, string>([["package.json", manifest], ...Object.entries(extra)]);
+  const files = new Map<string, string>([["package.json", manifest], [".node-version", "24.22.3\n"], ...Object.entries(extra)]);
   return findProblems(files, [...files.keys()]);
 }
 
@@ -25,8 +25,18 @@ test("reading process.env outside env.ts fails", () => {
 });
 
 test("a range version fails", () => {
-  const files = new Map([["package.json", JSON.stringify({ dependencies: { zod: "^4.6.7" } })]]);
-  assert.match(findProblems(files, ["package.json"]).join("\n"), /Pin an exact version/);
+  const files = new Map([["package.json", JSON.stringify({ dependencies: { zod: "^4.6.7" } })], [".node-version", "24.22.3\n"]]);
+  assert.match(findProblems(files, [...files.keys()]).join("\n"), /Pin an exact version/);
+});
+
+test("CI that sets up Node from a range fails, and the exact pin passes", () => {
+  const workflow = (line: string) => `jobs:\n  check:\n    steps:\n      - uses: actions/setup-node@v4\n        with:\n          ${line}\n`;
+  const ranged = problemsFor({ ".github/workflows/check.yml": workflow("node-version-file: package.json") });
+  assert.match(ranged.join("\n"), /check\.yml: sets up Node with "node-version-file: package\.json"/);
+  assert.match(problemsFor({ ".github/workflows/check.yml": workflow("node-version: 24") }).join("\n"), /"node-version: 24"/);
+  assert.deepEqual(problemsFor({ ".github/workflows/check.yml": workflow("node-version-file: .node-version") }), []);
+  const loose = findProblems(new Map([["package.json", manifest], [".node-version", "24\n"]]), ["package.json", ".node-version"]);
+  assert.match(loose.join("\n"), /\.node-version: says "24"/);
 });
 
 test("a script nothing calls fails", () => {
