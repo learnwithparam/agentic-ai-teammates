@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { test } from "node:test";
+import * as oidc from "openid-client";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
-import { personFromClaims, readCookie, samePagePath, verifyAccessToken } from "./auth";
+import { discover, personFromClaims, readCookie, samePagePath, verifyAccessToken } from "./auth";
 
 // Tokens signed here with a key made for the test, shaped like Keycloak's.
 const ISSUER = "http://localhost:8190/realms/teammates";
@@ -72,5 +74,33 @@ test("after sign-in a person only ever lands on a page of this app", () => {
   assert.equal(samePagePath("/board?teammate=invoice#run", app), "/board?teammate=invoice#run");
   for (const outside of ["//evil.example", "/\\evil.example", "/\\/evil.example", "https://evil.example", "/\tevil", undefined, 42]) {
     assert.equal(samePagePath(outside, app), "/", String(outside));
+  }
+});
+
+test("an app waits for a Keycloak that is not ready yet, and gives up after its tries", async () => {
+  let calls = 0;
+  const server = createServer((request, response) => {
+    calls += 1;
+    if (calls <= 2) {
+      response.writeHead(503).end();
+      return;
+    }
+    const issuer = `http://127.0.0.1:${(server.address() as { port: number }).port}/realms/teammates`;
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/certs`, token_endpoint: `${issuer}/token` }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as { port: number }).port;
+  const issuer = new URL(`http://127.0.0.1:${port}/realms/teammates`);
+  const options = { execute: [oidc.allowInsecureRequests] };
+  try {
+    const config = await discover(issuer, "web", "secret", options, { tries: 5, delayMs: 10 });
+    assert.equal(config.serverMetadata().issuer, issuer.href);
+    assert.equal(calls, 3);
+    calls = 0;
+    await assert.rejects(discover(issuer, "web", "secret", options, { tries: 2, delayMs: 10 }));
+    assert.equal(calls, 2);
+  } finally {
+    server.close();
   }
 });

@@ -92,12 +92,33 @@ declare module "express-serve-static-core" {
   }
 }
 
+// Keycloak can start after an app, or answer slowly on a busy laptop. Each app waits for it
+// and says so, instead of dying at startup.
+export async function discover(
+  issuerUrl: URL,
+  clientId: string,
+  clientSecret: string,
+  options?: oidc.DiscoveryRequestOptions,
+  wait = { tries: 30, delayMs: 5000 },
+): Promise<oidc.Configuration> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await oidc.discovery(issuerUrl, clientId, clientSecret, undefined, options);
+    } catch (error) {
+      if (attempt >= wait.tries) throw error;
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error(`Keycloak did not answer at ${issuerUrl.href} (${reason}). Trying again.`);
+      await new Promise((resolve) => setTimeout(resolve, wait.delayMs));
+    }
+  }
+}
+
 export async function createAuth(settings: AuthSettings) {
   const { pool, cookieName } = settings;
   const issuerUrl = new URL(settings.issuer);
   // Plain HTTP is only for Keycloak on this machine; in production the issuer is https.
   const options = issuerUrl.protocol === "http:" ? { execute: [oidc.allowInsecureRequests] } : undefined;
-  const config = await oidc.discovery(issuerUrl, settings.clientId, settings.clientSecret, undefined, options);
+  const config = await discover(issuerUrl, settings.clientId, settings.clientSecret, options);
   const keys = createRemoteJWKSet(new URL(config.serverMetadata().jwks_uri!));
   const redirectUri = `${settings.appUrl}${settings.mountPath}/callback`;
   const secure = settings.appUrl.startsWith("https:");
