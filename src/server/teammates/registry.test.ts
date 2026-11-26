@@ -31,6 +31,9 @@ test("every tool is used by some teammate, and every teammate has its own folder
     for (const file of ["teammate.ts", "work.ts", "graph.ts"]) assert.ok(existsSync(path.join(folder, file)), `${teammate.kind} has no ${file}`);
     // Every teammate is scored before anyone turns Quiet off.
     assert.ok(existsSync(path.join(import.meta.dirname, "../../..", teammate.evaluate)), `${teammate.kind}'s eval ${teammate.evaluate} is missing`);
+    // The board shows the purpose, and the conversation offers the questions. Choosing a teammate
+    // with neither once left Mission Control blank.
+    assert.ok(teammate.purpose.length > 0 && teammate.asks.length > 0, `${teammate.kind} has no purpose or no questions to offer`);
     // Every teammate faces the shared attacks and at least one of its own.
     assert.ok(teammate.attacks.length > 0, `${teammate.kind} has no attacks of its own`);
     const all = [...sharedAttacks(teammate), ...teammate.attacks];

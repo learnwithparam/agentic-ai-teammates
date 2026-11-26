@@ -7,6 +7,7 @@ export const invoice = defineTeammate({
   id: "invoices",
   name: "Invoice teammate",
   purpose: "Reads every invoice that reaches the accounts mailbox or the Invoices folder, and posts the ones that check out.",
+  asks: ["What are you waiting on?", "Why did the last invoice stop?", "Which vendors need a purchase order?"],
   tools: [
     "mail.history",
     "mail.message",

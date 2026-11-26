@@ -34,6 +34,7 @@ export const newTeammate = defineTeammate({
   id: "${kind}",
   name: "${title} teammate",
   purpose: "Say in one sentence what this teammate does for the company.",
+  asks: ["What did you do today?"],
   tools: ["memory.read", "memory.reported", "team.remind", "team.digest"],
   // Its work at eight on a working morning, and the day's summary in the evening.
   schedules: [{ name: WORK_TIMER, cron: "0 8 * * 1-5" }, DIGEST],

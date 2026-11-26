@@ -15,6 +15,7 @@ import type { Check } from "./permissions";
 import { rules, setRule } from "./policy";
 import { spendByDay } from "./spend";
 import { isToolName, toolDefinition, TOOLS } from "./tools";
+import { teammateKind } from "./teammates/registry";
 import { INSTRUCTIONS, MAX_INSTRUCTIONS, type Memory } from "./memory";
 import type { NewsShelf } from "./news-shelf";
 
@@ -160,6 +161,9 @@ export function createWebApp(deps: WebDeps): Express {
         id: row.id,
         kind: row.kind,
         name: row.name,
+        // A kind with no code has no definition, so it shows no purpose and offers no questions.
+        purpose: teammateKind(row.kind)?.purpose ?? "",
+        asks: teammateKind(row.kind)?.asks ?? [],
         paused: row.paused,
         quiet: row.quiet,
         autoPostLimit: Number(row.auto_post_limit),
@@ -320,7 +324,9 @@ export function createWebApp(deps: WebDeps): Express {
 // What the board may show of an approval: no hashes and no internal ids of who decided.
 function publicApproval(approval: Awaited<ReturnType<Approvals["get"]>> & {}) {
   const { decidedBy: _subject, ...shown } = approval;
-  return shown;
+  // The tool's own label, so the page keeps no list of tools.
+  const label = isToolName(approval.tool) ? toolDefinition(approval.tool).label : undefined;
+  return { ...shown, label: label ?? approval.tool };
 }
 
 // A run step as the board shows it. Model names stay in the trace, never on the page.

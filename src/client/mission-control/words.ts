@@ -50,14 +50,6 @@ export function targetLabel(target: OutboxMessage["target"]): string {
   return TARGETS[target];
 }
 
-const TOOLS: Record<string, string> = {
-  "books.post_bill": "Post a bill to QuirkBooks",
-};
-
-export function toolLabel(tool: string): string {
-  return TOOLS[tool] ?? tool;
-}
-
 const money = new Map<string, Intl.NumberFormat>();
 
 export function formatMoney(amount: number | null | undefined, currency: string | null | undefined): string {

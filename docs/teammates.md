@@ -33,7 +33,8 @@ The Payments teammate in `src/server/teammates/payments` was built this way. Rea
 | `kind` | The name the code uses, stored on each teammate row. A lowercase word. |
 | `id` | The id each company's teammate gets at startup, such as `invoices`. |
 | `name` | The name people see on the roster. |
-| `purpose` | One sentence the roster shows under the name. |
+| `purpose` | One sentence the board shows under the name when you choose the teammate. |
+| `asks` | The questions the conversation offers as one click. |
 | `tools` | The only tools the gateway lets this teammate call. Every other tool answers 403. |
 | `schedules` | Timers by name and cron, in the company's time zone. |
 | `listens` | The webhook sources that wake it: `mail`, `drive`, or none. |
@@ -71,7 +72,8 @@ A tool lives in a module under `src/server/tools/`. `defineTool` in `src/server/
 | `ruleReason` | What a person sees when a standing rule asks them to approve every call. |
 | `fixedPolicy` | Why no standing rule may change its policy. Posting and paying a bill have one. |
 | `guard` | The tool's own hard checks. It can refuse a call or ask a person. |
-| `card` | The approval card a person sees. Every writing tool has one. |
+| `card` | The approval card a person sees. Every writing tool has one. A pay run lists each bill on it. |
+| `label` | The words above that card, such as "Pay bills in QuirkBooks". Every writing tool has one. |
 | `run` | The work itself, run once the call is let through. |
 
 Every call goes through `callTool` in the same order. It checks the allowlist, then the arguments, the guard and the policy. Then it claims the approval and runs the tool. A tool cannot skip a step.

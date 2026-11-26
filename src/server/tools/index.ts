@@ -10,7 +10,7 @@ import { teamTools } from "./team";
 // The registry: the only list of tools. A teammate sends a name and arguments; the gateway runs
 // the tool through callTool with its own keys. Each module holds one app's tools.
 
-export { type ApprovalCard, type Decision, defineTool, type Grant, readTool, type ToolContext, type ToolDefinition, type ToolResult } from "./define";
+export { type ApprovalCard, type CardLine, type Decision, defineTool, type Grant, readTool, type ToolContext, type ToolDefinition, type ToolResult } from "./define";
 export { Card, InvoiceSource } from "./shapes";
 
 export const TOOLS = { ...mailTools, ...driveTools, ...booksTools, ...newsTools, ...memoryTools, ...teamTools };

@@ -614,6 +614,8 @@ test("an approved pay run pays each bill once, under the books' total a person's
   // OpenFGA's within_limit reads this amount, so it is the sum of the bills in the books.
   assert.equal(card?.amount, 2088);
   assert.equal(card?.canAllowAlways, false);
+  // The person sees each bill as the books have it, not as the caller named it.
+  assert.deepEqual(card?.lines.map((line) => [line.label, line.amount]), [["Harbor Lane Studios HL-2026-11", 1500], ["Harbor Lane Studios PF-8812", 588]]);
   assert.equal(PAID.length, 0);
 
   await new Approvals(pool).decide({

@@ -303,8 +303,13 @@ test("the board shows only teammates the person may view", async () => {
   const board = (await (await call("/api/board")).json()) as { teammates: unknown[] };
   assert.deepEqual(board.teammates, []);
   allow = true;
-  const shown = (await (await call("/api/board")).json()) as { teammates: { id: string }[] };
+  const shown = (await (await call("/api/board")).json()) as { teammates: { id: string; purpose: string; asks: string[] }[] };
   assert.deepEqual(shown.teammates.map((mate) => mate.id).sort(), TEAMMATES.map((teammate) => teammate.id).sort());
+  // Each teammate brings its own purpose and questions, so the page keeps no list of kinds.
+  for (const teammate of TEAMMATES) {
+    const mate = shown.teammates.find((item) => item.id === teammate.id);
+    assert.deepEqual([mate?.purpose, mate?.asks], [teammate.purpose, teammate.asks]);
+  }
 });
 
 test("an approver's limit travels as the condition on their approver tuple", () => {

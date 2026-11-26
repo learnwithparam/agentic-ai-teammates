@@ -151,7 +151,10 @@ export function App({ me }: { me: SignedIn }) {
       <SidebarInset className="h-svh min-w-0 overflow-hidden">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
           <SidebarTrigger />
-          <h1 className="min-w-0 flex-1 truncate font-display text-lg font-semibold">{title}</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate font-display text-lg leading-tight font-semibold">{title}</h1>
+            {view === "board" && teammate?.purpose && <p className="hidden truncate text-xs text-muted-foreground md:block">{teammate.purpose}</p>}
+          </div>
           {error && <p className="hidden text-sm text-fail sm:block">{error}</p>}
           <Button variant="outline" size="sm" className="2xl:hidden" onClick={() => setTalking(true)}>
             <MessageSquare />

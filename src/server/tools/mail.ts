@@ -35,6 +35,7 @@ export const mailTools = {
       inReplyTo: z.string().nullable(),
     }),
     decision: "classify",
+    label: "Reply by mail",
     readOnly: false,
     judgeRules: REPLY_RULES,
     ruleReason: "A standing rule asks a person to approve every reply.",

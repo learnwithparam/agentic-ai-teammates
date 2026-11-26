@@ -7,6 +7,7 @@ export const payments = defineTeammate({
   id: "payments",
   name: "Payments teammate",
   purpose: "Pays the bills that fall due, once a person approves the run, and never to a bank account that changed.",
+  asks: ["Which bills fall due this week?", "Why did you hold a bill back?"],
   tools: ["books.due_bills", "books.pay_bill", "memory.read", "memory.reported", "team.remind", "team.digest"],
   // The pay run at nine on a working morning, and the day's summary in the evening.
   schedules: [{ name: PAY_RUN_TIMER, cron: "0 9 * * 1-5" }, DIGEST],

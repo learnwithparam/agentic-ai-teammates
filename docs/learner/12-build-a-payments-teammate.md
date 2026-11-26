@@ -65,7 +65,9 @@ docker exec teammates-platform-postgres-1 \
   psql -U teammates -d teammates -c "UPDATE timers SET fire_at = now() WHERE teammate = 'payments' AND name = 'pay-run'"
 ```
 
-The payments card on the board moves to Waiting. Open the approval. It names the day, two bills and 2,088.00 EUR. Approve it as Ada.
+The payments card on the board moves to Waiting. Open the approval: it lists every open bill due within five days.
+
+On a fresh stack that is two bills, 2,088.00 EUR. Bills you posted in earlier lessons join the run if they fall due in that window. Approve it as Ada.
 
 Open QuirkBooks at http://localhost:8803 and look at the bills. Harbor Lane's rent and the Pixelforge licence are paid. Copperleaf is still open. The audit log has one `bill.paid` line per bill, with the reason Ada approved.
 

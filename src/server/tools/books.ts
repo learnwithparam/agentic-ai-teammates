@@ -81,6 +81,7 @@ export const booksTools = {
     // A bill posts at once only when every check passes and the total is within the teammate's limit.
     decision: "allow",
     fixedPolicy: "Posting a bill always runs the invoice checks.",
+    label: "Post a bill to QuirkBooks",
     readOnly: false,
     ruleReason: "standing_rule",
     guard: async (ctx, args) => {
@@ -146,6 +147,7 @@ export const booksTools = {
     // Money leaves the company, so a person decides every run, under their own approval limit.
     decision: "approve",
     fixedPolicy: "Money leaves the company, so a person approves every pay run.",
+    label: "Pay bills in QuirkBooks",
     readOnly: false,
     guard: async (ctx, args) => {
       if (new Set(args.billIds).size !== args.billIds.length) return { deny: "The pay run names a bill twice." };
@@ -160,15 +162,17 @@ export const booksTools = {
       // The card's amount is what a person's approval limit is checked against, so it must be the books' own sum.
       const sum = runTotal(found);
       if (sum !== args.total) return { deny: `The bills add up to ${sum.toFixed(2)}, not ${args.total.toFixed(2)}.` };
-      return {};
+      // The card lists each bill as QuirkBooks has it, so a person sees what they pay.
+      return { state: found };
     },
-    card: (args) => ({
+    card: (args, _reasons, bills) => ({
       title: `Pay run for ${args.day}: ${args.billIds.length} ${args.billIds.length === 1 ? "bill" : "bills"}`,
       brief: "Every bill is open, in the company's currency, and goes to the bank account it was posted with.",
       amount: args.total,
       currency: args.currency,
       // Every pay run is its own decision, so it can never become a standing rule.
       canAllowAlways: false,
+      lines: (bills ?? []).map((bill) => ({ label: `${bill.vendor} ${bill.invoiceNumber}`, detail: bill.dueDate ? `Due ${bill.dueDate}` : "No due date", amount: bill.total })),
     }),
     run: async (ctx, args, grant) => {
       const paid: string[] = [];

@@ -21,6 +21,7 @@ export const memoryTools = {
     description: "Keep one line in a note, such as what a vendor said. Name the note by topic, for example vendor-v-007.",
     args: z.object({ topic: Topic, line: Line }),
     decision: "classify",
+    label: "Keep a note",
     readOnly: false,
     modelMayCall: true,
     judgeRules: NOTE_RULES,
@@ -37,6 +38,7 @@ export const memoryTools = {
     // A later run reads this line, so it is judged like a note.
     decision: "classify",
     judgeRules: NOTE_RULES,
+    label: "Write task progress",
     readOnly: false,
     modelMayCall: true,
     card: (args) => ({ title: `Progress on ${args.task}`, brief: safeLine(args.line, 200), canAllowAlways: true }),
@@ -48,6 +50,7 @@ export const memoryTools = {
     description: "Record what was told to a person, and refuse it when they were told the same before.",
     args: z.object({ person: z.email(), line: Line }),
     decision: "allow",
+    label: "Record what a person was told",
     readOnly: false,
     card: () => ({ title: "A line in reported.md", brief: "A standing rule asks a person before each line.", canAllowAlways: true }),
     run: async (ctx, args) => ({ status: "done", result: await ctx.deps.memory.report(ctx.scope, args.person, safeLine(args.line, 300)) }),
@@ -62,6 +65,7 @@ export const memoryTools = {
       why: z.string().min(1).max(300),
     }),
     decision: "allow",
+    label: "Propose a tidier note",
     readOnly: false,
     card: (args) => ({ title: `Tidy notes/${args.topic}.md`, brief: safeLine(args.why, 200), canAllowAlways: false }),
     run: async (ctx, args) => {
@@ -95,6 +99,7 @@ export const memoryTools = {
     description: "Read what this teammate already told one person.",
     args: z.object({ person: z.email() }),
     decision: "allow",
+    label: "Read what a person was told",
     readOnly: false,
     card: () => ({ title: "What was told to a person", brief: "A standing rule asks a person before each read.", canAllowAlways: true }),
     run: async (ctx, args) => {
@@ -109,6 +114,7 @@ export const memoryTools = {
     description: "Write a person's decision on an invoice into the vendor's note.",
     args: z.object({ approvalId: z.uuid() }),
     decision: "allow",
+    label: "Record a decision",
     readOnly: false,
     card: () => ({ title: "A note in memory", brief: "A standing rule asks a person before each note.", canAllowAlways: true }),
     run: async (ctx, { approvalId }) => {

@@ -20,11 +20,6 @@ import { ApiError, Conversation, get, type Line, post, type Teammate } from "./a
 const ASK_EVERY_MS = 2000;
 const GIVE_UP_MS = 120_000;
 
-const SUGGESTIONS: Record<Teammate["kind"], string[]> = {
-  invoice: ["What are you waiting on?", "Why did the last invoice stop?", "Which vendors need a purchase order?"],
-  news: ["What did you pick today, and why?", "Which sources do you read?"],
-};
-
 function toMessage(line: Line): ThreadMessageLike {
   return { id: `${line.messageId}-${line.role}`, role: line.role === "person" ? "user" : "assistant", content: line.text, createdAt: new Date(line.at) };
 }
@@ -123,7 +118,7 @@ export function Thread({ teammate }: { teammate: Teammate }) {
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">Ask {teammate.name} what it is doing, or why it stopped. It answers from its runs and its tools.</p>
               <div className="flex flex-col items-start gap-2">
-                {SUGGESTIONS[teammate.kind].map((prompt) => (
+                {teammate.asks.map((prompt) => (
                   <ThreadPrimitive.Suggestion key={prompt} prompt={prompt} send asChild>
                     <button type="button" className="rounded-full border px-3 py-1.5 text-left text-sm hover:bg-muted">
                       {prompt}

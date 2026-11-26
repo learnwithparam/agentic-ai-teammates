@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { type Approval, ApiError, type SignedIn, post } from "./api";
 import { Tone } from "./Tone";
-import { formatMoney, reasonText, toolLabel, when } from "./words";
+import { formatMoney, reasonText, when } from "./words";
 
 // One call a teammate may not make alone. The card shows why it stopped, in the checks' own
 // sentences, and what it read. The person who clicks is the one signed in; the server checks
@@ -86,7 +86,7 @@ export function ApprovalCard({ approval, me, onDecided, onOpenRun }: { approval:
     <article className="flex flex-col gap-3 rounded-lg border border-foreground/15 bg-card p-4 shadow-[0_1px_0_var(--border)] data-[pending=true]:border-l-4 data-[pending=true]:border-l-accent-foreground" data-pending={pending}>
       <header className="flex flex-wrap-reverse items-start justify-between gap-x-3 gap-y-1">
         <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">{toolLabel(approval.tool)}</p>
+          <p className="text-xs text-muted-foreground">{approval.label}</p>
           <h3 className="font-display text-base leading-snug font-semibold">{approval.title}</h3>
         </div>
         <p className="font-display text-lg font-semibold tabular-nums">{formatMoney(approval.amount, approval.currency)}</p>
@@ -101,12 +101,27 @@ export function ApprovalCard({ approval, me, onDecided, onOpenRun }: { approval:
         </ul>
       )}
       <p className="text-sm leading-relaxed">{approval.brief}</p>
-      <details className="group text-sm">
-        <summary className="cursor-pointer text-muted-foreground select-none hover:text-foreground">What the teammate read</summary>
-        <div className="mt-2">
-          <InvoiceFacts approval={approval} />
-        </div>
-      </details>
+      {approval.lines.length > 0 && (
+        <ul className="flex flex-col divide-y rounded-md border text-sm">
+          {approval.lines.map((line) => (
+            <li key={line.label} className="flex items-baseline justify-between gap-4 px-3 py-2">
+              <span className="min-w-0">
+                <span className="block truncate">{line.label}</span>
+                <span className="text-xs text-muted-foreground">{line.detail}</span>
+              </span>
+              <span className="tabular-nums">{formatMoney(line.amount, approval.currency)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(approval.args.invoice || approval.args.source) && (
+        <details className="group text-sm">
+          <summary className="cursor-pointer text-muted-foreground select-none hover:text-foreground">What the teammate read</summary>
+          <div className="mt-2">
+            <InvoiceFacts approval={approval} />
+          </div>
+        </details>
+      )}
       {pending ? (
         <div className="flex flex-col gap-3 border-t pt-3">
           {blocked ? (

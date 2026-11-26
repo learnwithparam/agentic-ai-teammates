@@ -5,7 +5,7 @@ import { inTransaction } from "./db";
 import { cancelTimer, setTimer } from "./timers";
 import { payloadHash } from "./canonical";
 import { setRule } from "./policy";
-import { isToolName, type ToolName } from "./tools";
+import { type CardLine, isToolName, type ToolName } from "./tools";
 
 // An approval is a deferred tool call. The gateway writes one and the run ends. A person decides
 // on the board, and the decision lands in the teammate's inbox as an event, which resumes the run.
@@ -25,6 +25,8 @@ export type NewApproval = {
   reasons: string[];
   // A failed invoice check is a fact about one invoice, so it never offers "allow always".
   canAllowAlways: boolean;
+  // The items the person approves, when the tool lists them. Most cards have none.
+  lines?: CardLine[];
 };
 
 export type Approval = {
@@ -42,6 +44,7 @@ export type Approval = {
   reasons: string[];
   status: "pending" | "approved" | "denied";
   canAllowAlways: boolean;
+  lines: CardLine[];
   decidedBy: string | null;
   decidedByName: string | null;
   decisionNote: string | null;
@@ -68,6 +71,7 @@ function toApproval(row: Record<string, unknown>): Approval {
     reasons: row.reasons as string[],
     status: row.status as Approval["status"],
     canAllowAlways: Boolean(row.can_allow_always),
+    lines: (row.lines as CardLine[] | undefined) ?? [],
     decidedBy: (row.decided_by as string | null) ?? null,
     decidedByName: (row.decided_by_name as string | null) ?? null,
     decisionNote: (row.decision_note as string | null) ?? null,
@@ -100,12 +104,12 @@ export class Approvals {
       );
       if (existing.rows[0]) return toApproval(existing.rows[0]);
       const { rows } = await client.query(
-        `INSERT INTO approvals (id, company, teammate, run_id, thread_id, tool, args, payload_hash, amount, currency, title, brief, reasons, can_allow_always)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+        `INSERT INTO approvals (id, company, teammate, run_id, thread_id, tool, args, payload_hash, amount, currency, title, brief, reasons, can_allow_always, lines)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
         [
           randomUUID(), approval.company, approval.teammate, approval.runId, approval.threadId, approval.tool,
           JSON.stringify(approval.args), hash, approval.amount, approval.currency, approval.title, approval.brief,
-          JSON.stringify(approval.reasons), approval.canAllowAlways,
+          JSON.stringify(approval.reasons), approval.canAllowAlways, JSON.stringify(approval.lines ?? []),
         ],
       );
       // If nobody decides within a day, the teammate reminds the people who can.

@@ -30,6 +30,8 @@ export const Teammate = z.object({
   // The registry on the server is the one list of kinds, so the page takes any.
   kind: z.string(),
   name: z.string(),
+  purpose: z.string(),
+  asks: z.array(z.string()),
   paused: z.boolean(),
   quiet: z.boolean(),
   autoPostLimit: z.number(),
@@ -96,6 +98,9 @@ export const Approval = z.object({
   title: z.string(),
   brief: z.string(),
   reasons: z.array(z.string()),
+  label: z.string(),
+  // One line per item a person approves, such as each bill in a pay run.
+  lines: z.array(z.object({ label: z.string(), detail: z.string(), amount: z.number() })),
   status: z.enum(["pending", "approved", "denied"]),
   canAllowAlways: z.boolean(),
   decidedByName: z.string().nullable(),

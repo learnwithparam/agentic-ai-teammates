@@ -38,8 +38,10 @@ export type TeammateDefinition = {
   // The id each company's teammate gets when startup creates it, such as "invoices".
   id: string;
   name: string;
-  // One sentence the roster shows under the name.
+  // One sentence the board shows under the name when a person chooses the teammate.
   purpose: string;
+  // The questions the conversation offers as one click, written for this teammate's job.
+  asks: string[];
   // The only tools the gateway lets this teammate call.
   tools: ToolName[];
   schedules: Schedule[];

@@ -48,7 +48,9 @@ export type Grant = { send: "draft" | "queued"; decidedBy: string | null; becaus
 // read itself, such as the person's own words.
 export type GuardResult<State> = { deny?: string; reasons?: string[]; state?: State; because?: string; judgeWith?: unknown };
 
-export type ApprovalCard = { title: string; brief: string; amount?: number; currency?: string; canAllowAlways: boolean };
+// One item a person approves, such as one bill in a pay run. The amount is in the card's currency.
+export type CardLine = { label: string; detail: string; amount: number };
+export type ApprovalCard = { title: string; brief: string; amount?: number; currency?: string; canAllowAlways: boolean; lines?: CardLine[] };
 
 export type ToolDefinition<Args extends z.ZodType = z.ZodType, State = unknown> = {
   description: string;
@@ -56,6 +58,8 @@ export type ToolDefinition<Args extends z.ZodType = z.ZodType, State = unknown> 
   decision: Decision;
   // A read-only tool may be offered to a model in an open-ended loop.
   readOnly: boolean;
+  // What a person sees above an approval card, such as "Pay bills in QuirkBooks". Every writing tool has one.
+  label?: string;
   // A small write that stays inside the company, such as a follow-up or a progress line. A model
   // may call it in chat, and it still runs through every step of callTool. Every other write is
   // never offered to a model.
@@ -69,12 +73,14 @@ export type ToolDefinition<Args extends z.ZodType = z.ZodType, State = unknown> 
   fixedPolicy?: string;
   guard?: (ctx: ToolContext, args: z.infer<Args>) => Promise<GuardResult<State>>;
   // The approval card a person sees when this call waits for them. Every writing tool has one.
-  card?: (args: z.infer<Args>, reasons: string[]) => ApprovalCard;
+  // state is what the guard read, so the card shows the books' facts, not the caller's.
+  card?: (args: z.infer<Args>, reasons: string[], state: State | undefined) => ApprovalCard;
   run: (ctx: ToolContext, args: z.infer<Args>, grant: Grant, state: State | undefined) => Promise<ToolResult>;
 };
 
 export function defineTool<Args extends z.ZodType, State = unknown>(tool: ToolDefinition<Args, State>): ToolDefinition<Args, State> {
   if (!tool.readOnly && !tool.card) throw new Error(`A writing tool needs an approval card: ${tool.description}`);
+  if (!tool.readOnly && !tool.label) throw new Error(`A writing tool needs a label for its card: ${tool.description}`);
   return tool;
 }
 

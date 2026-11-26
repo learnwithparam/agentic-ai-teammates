@@ -23,7 +23,7 @@ import { FAST_TASKS, type Outcome, route, ROUTING_MODES, STRONG_TASKS, type Task
 import { budgetLeft, recordSpend } from "./spend";
 import type { Check } from "./permissions";
 import { allowedTools, teammateKind } from "./teammates/registry";
-import { type Card, isToolName, modelToolSpec, type ToolContext, toolDefinition, type ToolName, type ToolResult } from "./tools";
+import { type ApprovalCard, type Card, isToolName, modelToolSpec, type ToolContext, toolDefinition, type ToolName, type ToolResult } from "./tools";
 
 // The gateway: the permissions primitive. It holds every credential (the OpenRouter key and the
 // world apps' keys), so a teammate never sees one. The worker asks it for model calls and tool
@@ -194,7 +194,7 @@ export function createGatewayApp(deps: GatewayDeps): Express {
     scope: RunScope & { threadId: string },
     tool: ToolName,
     args: unknown,
-    card: { title: string; brief: string; reasons: string[]; amount?: number; currency?: string; canAllowAlways: boolean },
+    card: ApprovalCard & { reasons: string[] },
   ): Promise<ToolResult> {
     const approval = await approvals.request({
       ...scope,
@@ -206,6 +206,7 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       brief: card.brief,
       reasons: card.reasons,
       canAllowAlways: card.canAllowAlways,
+      lines: card.lines ?? [],
     });
     return { status: "needs_approval", approvalId: approval.id, reasons: card.reasons };
   }
@@ -255,7 +256,7 @@ export function createGatewayApp(deps: GatewayDeps): Express {
       else reasons = ["No quick check could judge this call."];
     }
     if (!tool.card) return { status: "denied", reason: `${name} has no approval card, so it cannot wait for a person.` };
-    return deferToPerson(scope, name, args, { ...tool.card(args, reasons), reasons });
+    return deferToPerson(scope, name, args, { ...tool.card(args, reasons, checked.state), reasons });
   }
 
   // ---------- Routes ----------

@@ -31,6 +31,7 @@ export const newsTools = {
     // It records the day's stories in the gateway, so it is never offered to a model.
     args: z.object({ day: Day }),
     decision: "allow",
+    label: "Collect the news",
     readOnly: false,
     card: (args) => ({ title: `Collect the news for ${args.day}`, brief: "A standing rule asks a person before the news is collected.", canAllowAlways: true }),
     run: async (ctx, { day }) => {
@@ -77,6 +78,7 @@ export const newsTools = {
     description: "Publish the day's news cards.",
     args: z.object({ day: Day, cards: z.array(Card).min(1).max(10) }),
     decision: "allow",
+    label: "Publish the news",
     readOnly: false,
     judgeRules: PUBLISH_RULES,
     ruleReason: "A standing rule asks a person to approve each day's news.",

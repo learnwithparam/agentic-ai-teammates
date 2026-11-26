@@ -85,6 +85,7 @@ export const teamTools = {
     description: `Set a follow-up for yourself: a time, at most ${FOLLOW_UP_DAYS} days ahead, when you look at something again. Say what and why.`,
     args: FollowUp,
     decision: "allow",
+    label: "Set a follow-up",
     readOnly: false,
     modelMayCall: true,
     guard: async (ctx, args) => {
@@ -123,6 +124,7 @@ export const teamTools = {
     // check reads the person's own words and the document's real sender, never the model's ask.
     decision: "classify",
     judgeRules: HAND_OVER_RULES,
+    label: "Take on a document",
     readOnly: false,
     modelMayCall: true,
     guard: async (ctx, args) => {
@@ -154,6 +156,7 @@ export const teamTools = {
     description: "Remind the people who decide approvals that one is still waiting.",
     args: z.object({ approvalId: z.uuid() }),
     decision: "allow",
+    label: "Remind approvers",
     readOnly: false,
     card: () => ({ title: "A reminder to the team", brief: "A standing rule asks a person before each reminder.", canAllowAlways: true }),
     run: async (ctx, args) => toDeciders(ctx, await reminderMail(ctx.deps.pool, COMPANIES[ctx.scope.company], args.approvalId)),
@@ -162,6 +165,7 @@ export const teamTools = {
     description: "Send the people who decide approvals the day's summary of this teammate's work.",
     args: z.object({ day: Day }),
     decision: "allow",
+    label: "Send the day's summary",
     readOnly: false,
     card: (args) => ({ title: `The summary for ${args.day}`, brief: "A standing rule asks a person before each summary.", canAllowAlways: true }),
     run: async (ctx, args) => toDeciders(ctx, await digestMail(ctx.deps.pool, COMPANIES[ctx.scope.company], ctx.scope.teammate, args.day)),
