@@ -2,9 +2,10 @@ import type { HookSource, TeammateDefinition } from "./define";
 import type { ToolName } from "../tools";
 import { invoice } from "./invoice/teammate";
 import { news } from "./news/teammate";
+import { payments } from "./payments/teammate";
 
 // The registry: the only list of teammates. A new teammate is one folder and one line here.
-export const TEAMMATES: TeammateDefinition[] = [invoice, news];
+export const TEAMMATES: TeammateDefinition[] = [invoice, news, payments];
 
 export function teammateKind(kind: string): TeammateDefinition | undefined {
   return TEAMMATES.find((teammate) => teammate.kind === kind);

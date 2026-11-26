@@ -1,3 +1,4 @@
+import type { DueBill } from "../payments";
 import type { PurchaseOrder, Vendor } from "../checks";
 
 // What a teammate needs from mail, files and the books, whichever service holds them. LMail
@@ -62,4 +63,9 @@ export interface Accounting {
   bills(vendorId: string, invoiceNumber?: string): Promise<BillSummary[]>;
   // Posts once per key. A duplicate invoice comes back as { duplicateOf }.
   postBill(bill: NewBill, idempotencyKey: string): Promise<PostedBill | { duplicateOf: string }>;
+  // The open bills due on or before a day, overdue ones included.
+  dueBills(dueBy: string): Promise<DueBill[]>;
+  bill(id: string): Promise<DueBill | null>;
+  // Pays once per key. QuirkBooks's own refusal, such as a changed bank, comes back as { refused }.
+  payBill(id: string, idempotencyKey: string, because: string): Promise<{ paidAt: string } | { refused: string }>;
 }

@@ -7,6 +7,7 @@ import { NodeSDK, tracing } from "@opentelemetry/sdk-node";
 import type { Pool } from "pg";
 import { handleErrors, HttpError } from "../../apps/shared/server";
 import { Approvals } from "./approvals";
+import type { DueBill } from "./payments";
 import { createGatewayApp, type GatewayDeps } from "./gateway-app";
 import { GatewayClient } from "./gateway-client";
 import type { CallModel } from "./llm";
@@ -68,6 +69,16 @@ before(async () => {
         POSTED.push({ ...bill, key });
         return { id: `B-${POSTED.length}`, vendorId: bill.vendorId, invoiceNumber: bill.invoiceNumber, total: bill.total };
       },
+      // Bills to pay, kept in BILLS. A payment is kept in PAID, once per key, as QuirkBooks keeps it.
+      dueBills: async () => BILLS.filter((bill) => bill.status === "open"),
+      bill: async (id) => BILLS.find((bill) => bill.id === id) ?? null,
+      payBill: async (id, key, because) => {
+        const bill = BILLS.find((each) => each.id === id)!;
+        if (bill.status === "paid") return { refused: `${bill.invoiceNumber} is already paid.` };
+        bill.status = "paid";
+        PAID.push({ id, key, because });
+        return { paidAt: "2026-11-26T09:00:00.000Z" };
+      },
     },
     publisher: shelf,
     memory,
@@ -97,6 +108,19 @@ after(async () => {
 
 const LUMEN = { id: "V-007", name: "Lumen Print House", email: "billing@lumen.example", iban: "DE89370400440532013000", currency: "EUR", requiresPo: false };
 const POSTED: Array<{ postedBecause: string; total: number; key: string }> = [];
+
+// Two bills Bramble may pay, a large one, and one whose vendor's bank changed after it was posted.
+const due = (id: string, invoiceNumber: string, total: number, vendorIban = "IE29AIBK93115212345678"): DueBill => ({
+  id, vendorId: "V-004", vendor: "Harbor Lane Studios", invoiceNumber, dueDate: "2026-11-28", currency: "EUR", total, status: "open",
+  payToIban: "IE29AIBK93115212345678", vendorIban,
+});
+const BILLS: DueBill[] = [
+  due("3a1c9e7b-5d2f-4b8a-9c6e-1f0d2b4a6c02", "HL-2026-11", 1500),
+  due("5b7f0c2e-9d1a-4e3b-8c6f-2a4d1e7b9c01", "PF-8812", 588),
+  due("6c3e1f9d-7a4b-4d0c-9e8f-3b2f4d6c8e04", "HL-2026-12", 6200),
+  due("4b2d0f8c-6e3a-4c9b-8d7f-2a1e3c5b7d03", "CC-5480", 420, "ES9121000418450200051332"),
+];
+const PAID: Array<{ id: string; key: string; because: string }> = [];
 
 const STORIES = ["buses", "trams", "ferries"].map((name) => ({
   url: `https://example.org/${name}`,
@@ -557,4 +581,47 @@ test("a model is offered a small write only for a teammate whose chat acts", asy
   assert.equal(await offer("news", ["team.follow_up"]), 403);
   assert.equal(await offer("invoices", ["books.post_bill"]), 422);
   assert.equal(await offer("invoices", ["memory.report"]), 422);
+});
+
+test("a pay run is refused unless every bill may be paid and the total is the books' own sum", async () => {
+  const runId = await startRun("payments");
+  const scope = { runId, company: "bramble", teammate: "payments", threadId: "payments:2026-11-26" };
+  const [rent, , , changed] = BILLS.map((bill) => bill.id);
+  const pay = (args: Record<string, unknown>) => callTool("books.pay_bill", { ...scope, args: { day: "2026-11-26", currency: "EUR", ...args } });
+
+  const due = await callTool("books.due_bills", { ...scope, args: { day: "2026-11-26", withinDays: 5 } });
+  assert.equal(due.result.bills.length, 4);
+  assert.match((await pay({ billIds: [rent, changed], total: 1920 })).reason, /bank details changed/);
+  assert.match((await pay({ billIds: [rent], total: 15 })).reason, /add up to 1500.00, not 15.00/);
+  assert.match((await pay({ billIds: [rent, rent], total: 3000 })).reason, /twice/);
+  assert.match((await pay({ billIds: [rent], total: 1500, currency: "USD" })).reason, /company's currency/);
+  assert.match((await pay({ billIds: [randomUUID()], total: 1500 })).reason, /no bill/);
+  assert.equal(PAID.length, 0);
+});
+
+test("an approved pay run pays each bill once, under the books' total a person's limit is checked against", async () => {
+  const runId = await startRun("payments");
+  const scope = { runId, company: "bramble", teammate: "payments", threadId: "payments:2026-11-27" };
+  const [rent, licence] = BILLS.map((bill) => bill.id);
+  const args = { day: "2026-11-27", billIds: [rent, licence], total: 2088, currency: "EUR" };
+
+  const asked = await callTool("books.pay_bill", { ...scope, args });
+  assert.equal(asked.status, "needs_approval");
+  const card = await new Approvals(pool).get("bramble", asked.approvalId);
+  // OpenFGA's within_limit reads this amount, so it is the sum of the bills in the books.
+  assert.equal(card?.amount, 2088);
+  assert.equal(card?.canAllowAlways, false);
+  assert.equal(PAID.length, 0);
+
+  await new Approvals(pool).decide({
+    company: "bramble", id: asked.approvalId, approve: true, allowAlways: false, note: null,
+    person: { subject: "ada", name: "Ada", email: "ada@bramble.example" },
+  });
+  const approved = { ...scope, args, approvalId: asked.approvalId };
+  const done = await callTool("books.pay_bill", approved);
+  assert.deepEqual(done.result, { paid: [rent, licence], refused: [] });
+  assert.deepEqual(PAID.map((payment) => payment.key), [`pay:${rent}`, `pay:${licence}`]);
+  // The approval pays once. Trying it again is refused, and nothing is paid twice.
+  assert.equal((await callTool("books.pay_bill", approved)).status, "denied");
+  assert.equal(PAID.length, 2);
 });

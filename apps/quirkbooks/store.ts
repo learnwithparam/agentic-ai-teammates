@@ -66,14 +66,24 @@ export class Books {
     return rows[0] ? purchaseOrder(rows[0]) : null;
   }
 
-  async bills(filter: { vendorId?: string; invoiceNumber?: string } = {}) {
+  // dueBy lists only the open bills due on or before that day, overdue ones included, soonest first.
+  async bills(filter: { vendorId?: string; invoiceNumber?: string; dueBy?: string } = {}) {
     const { rows } = await this.pool.query(
-      `SELECT b.*, v.name AS vendor FROM bills b JOIN vendors v ON v.id = b.vendor_id
+      `SELECT b.*, v.name AS vendor, v.iban AS vendor_iban FROM bills b JOIN vendors v ON v.id = b.vendor_id
        WHERE ($1::text IS NULL OR b.vendor_id = $1) AND ($2::text IS NULL OR lower(b.invoice_number) = lower($2))
-       ORDER BY b.created_at DESC LIMIT 200`,
-      [filter.vendorId ?? null, filter.invoiceNumber ?? null],
+         AND ($3::date IS NULL OR (b.status = 'open' AND b.due_date <= $3))
+       ORDER BY CASE WHEN $3::date IS NULL THEN NULL ELSE b.due_date END, b.created_at DESC LIMIT 200`,
+      [filter.vendorId ?? null, filter.invoiceNumber ?? null, filter.dueBy ?? null],
     );
     return rows.map(bill);
+  }
+
+  async bill(id: string) {
+    const { rows } = await this.pool.query(
+      "SELECT b.*, v.name AS vendor, v.iban AS vendor_iban FROM bills b JOIN vendors v ON v.id = b.vendor_id WHERE b.id = $1",
+      [id],
+    );
+    return rows[0] ? bill(rows[0]) : null;
   }
 
   async billLines(id: string) {
@@ -138,9 +148,9 @@ export class Books {
     if (existing[0]) return { status: 409, body: { error: "This invoice is already in the books.", billId: existing[0].id } };
     const id = randomUUID();
     await client.query(
-      `INSERT INTO bills (id, vendor_id, invoice_number, invoice_date, due_date, po_number, currency, net, tax, total, posted_by, posted_because, source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      [id, supplier.id, input.invoiceNumber, input.invoiceDate, input.dueDate, input.poNumber, input.currency, round(net), input.tax, input.total, actor, input.postedBecause, input.source],
+      `INSERT INTO bills (id, vendor_id, invoice_number, invoice_date, due_date, po_number, currency, net, tax, total, posted_by, posted_because, source, pay_to_iban)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      [id, supplier.id, input.invoiceNumber, input.invoiceDate, input.dueDate, input.poNumber, input.currency, round(net), input.tax, input.total, actor, input.postedBecause, input.source, supplier.iban],
     );
     for (const [index, line] of input.lines.entries()) {
       await client.query("INSERT INTO bill_lines (bill_id, position, description, amount) VALUES ($1, $2, $3, $4)", [id, index + 1, line.description, line.amount]);
@@ -158,21 +168,70 @@ export class Books {
     return { status: 201, body: { id, vendorId: supplier.id, invoiceNumber: input.invoiceNumber, total: input.total } };
   }
 
+  // A person pays a bill from the web page.
   async markPaid(id: string, actor: string) {
     await inTransaction(this.pool, async (client) => {
-      const { rows } = await client.query<{ total: string; status: string; vendor_id: string; invoice_number: string }>(
-        "SELECT total, status, vendor_id, invoice_number FROM bills WHERE id = $1 FOR UPDATE",
-        [id],
-      );
-      if (!rows[0]) throw new HttpError(404, "No such bill.");
-      if (rows[0].status === "paid") return;
-      const entryId = randomUUID();
-      await client.query("INSERT INTO journal_entries (id, bill_id, entry_date, memo) VALUES ($1, $2, current_date, $3)", [entryId, id, `Payment ${rows[0].invoice_number}`]);
-      await client.query("INSERT INTO journal_lines (entry_id, position, account, debit, credit) VALUES ($1, 1, '2000', $2, 0), ($1, 2, '1000', 0, $2)", [entryId, rows[0].total]);
-      await client.query("UPDATE bills SET status = 'paid' WHERE id = $1", [id]);
-      await audit(client, actor, "bill.paid", id, { total: money(rows[0].total) });
+      const found = await lockBill(client, id);
+      if (!found) throw new HttpError(404, "No such bill.");
+      if (found.status === "paid") return;
+      await pay(client, found, actor, "paid by hand");
     });
   }
+
+  // A program pays a bill once per idempotency key. QuirkBooks itself refuses a bill that is
+  // paid already, and one whose vendor's bank changed after the bill was posted: the money
+  // would go to an account nobody checked against the invoice.
+  async payBill(id: string, because: string, actor: string, idempotencyKey: string): Promise<{ status: number; body: unknown }> {
+    const requestHash = createHash("sha256").update(JSON.stringify({ pay: id })).digest("hex");
+    return inTransaction(this.pool, async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${actor}:${idempotencyKey}`]);
+      const seen = await client.query<{ request_hash: string; status: number; response: unknown }>(
+        "SELECT request_hash, status, response FROM idempotency WHERE client = $1 AND key = $2",
+        [actor, idempotencyKey],
+      );
+      if (seen.rows[0]) {
+        if (seen.rows[0].request_hash !== requestHash) throw new HttpError(422, "This Idempotency-Key was used for a different payment.");
+        return { status: seen.rows[0].status, body: seen.rows[0].response };
+      }
+      const found = await lockBill(client, id);
+      if (!found) return { status: 404, body: { error: "No such bill." } };
+      if (found.status === "paid") return { status: 409, body: { error: `${found.invoice_number} is already paid.` } };
+      if (found.pay_to_iban !== found.vendor_iban) {
+        return { status: 422, body: { error: `${found.invoice_number} was posted to a bank account the vendor's record no longer has.` } };
+      }
+      const paidAt = await pay(client, found, actor, because);
+      const result = { status: 200, body: { id, paidAt, total: money(found.total), iban: found.pay_to_iban } };
+      // Only a payment is remembered, so a refusal a person fixes can be tried again with the same key.
+      await client.query("INSERT INTO idempotency (client, key, request_hash, status, response) VALUES ($1, $2, $3, $4, $5)", [
+        actor, idempotencyKey, requestHash, result.status, JSON.stringify(result.body),
+      ]);
+      return result;
+    });
+  }
+}
+
+type LockedBill = { id: string; total: string; status: string; invoice_number: string; pay_to_iban: string; vendor_iban: string };
+
+async function lockBill(client: PoolClient, id: string): Promise<LockedBill | null> {
+  const { rows } = await client.query<LockedBill>(
+    `SELECT b.id, b.total, b.status, b.invoice_number, b.pay_to_iban, v.iban AS vendor_iban
+     FROM bills b JOIN vendors v ON v.id = b.vendor_id WHERE b.id = $1 FOR UPDATE OF b`,
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+// Money leaves the bank: the bill moves out of accounts payable, and the audit log says who and why.
+async function pay(client: PoolClient, found: LockedBill, actor: string, because: string): Promise<string> {
+  const entryId = randomUUID();
+  await client.query("INSERT INTO journal_entries (id, bill_id, entry_date, memo) VALUES ($1, $2, current_date, $3)", [entryId, found.id, `Payment ${found.invoice_number}`]);
+  await client.query("INSERT INTO journal_lines (entry_id, position, account, debit, credit) VALUES ($1, 1, '2000', $2, 0), ($1, 2, '1000', 0, $2)", [entryId, found.total]);
+  const { rows } = await client.query<{ paid_at: Date }>(
+    "UPDATE bills SET status = 'paid', paid_at = now(), paid_by = $2 WHERE id = $1 RETURNING paid_at",
+    [found.id, actor],
+  );
+  await audit(client, actor, "bill.paid", found.id, { total: money(found.total), iban: found.pay_to_iban, because });
+  return rows[0].paid_at.toISOString();
 }
 
 async function audit(client: PoolClient, actor: string, action: string, subject: string, detail: unknown) {
@@ -202,6 +261,8 @@ function bill(row: Record<string, unknown>) {
     invoiceDate: dateText(row.invoice_date), dueDate: dateText(row.due_date), poNumber: (row.po_number as string | null) ?? null,
     currency: String(row.currency), net: money(row.net), tax: money(row.tax), total: money(row.total), status: String(row.status),
     postedBy: String(row.posted_by), postedBecause: String(row.posted_because), source: (row.source as string | null) ?? null,
+    payToIban: String(row.pay_to_iban), vendorIban: String(row.vendor_iban),
+    paidAt: row.paid_at ? (row.paid_at as Date).toISOString() : null, paidBy: (row.paid_by as string | null) ?? null,
     createdAt: (row.created_at as Date).toISOString(),
   };
 }

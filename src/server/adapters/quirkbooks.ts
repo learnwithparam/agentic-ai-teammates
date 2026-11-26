@@ -1,9 +1,11 @@
+import { z } from "zod";
 import type { PurchaseOrder, Vendor } from "../checks";
+import { type DueBill, DueBillSchema } from "../payments";
 import { serviceClient } from "./http";
 import type { Accounting, BillSummary, NewBill, PostedBill } from "./types";
 
-// QuirkBooks, through its program API. The key can read vendors, orders and bills and post
-// bills; it cannot change a vendor's bank account or pay anything.
+// QuirkBooks, through its program API. The key can read vendors, orders and bills, post bills
+// and pay them. It cannot change a vendor's bank account.
 
 export class QuirkBooks implements Accounting {
   private readonly service;
@@ -39,5 +41,26 @@ export class QuirkBooks implements Accounting {
     if (response.status === 409) return { duplicateOf: ((await response.json()) as { billId: string }).billId };
     if (!response.ok) throw await this.service.failure(response);
     return (await response.json()) as PostedBill;
+  }
+
+  async dueBills(dueBy: string): Promise<DueBill[]> {
+    return z.array(DueBillSchema).parse(await this.service.json(`/api/v1/bills?dueBy=${encodeURIComponent(dueBy)}`));
+  }
+
+  async bill(id: string): Promise<DueBill | null> {
+    const response = await this.service.call(`/api/v1/bills/${encodeURIComponent(id)}`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw await this.service.failure(response);
+    return DueBillSchema.parse(await response.json());
+  }
+
+  async payBill(id: string, idempotencyKey: string, because: string): Promise<{ paidAt: string } | { refused: string }> {
+    const response = await this.service.call(`/api/v1/bills/${encodeURIComponent(id)}/pay`, {
+      method: "POST", body: JSON.stringify({ because }), headers: { "Idempotency-Key": idempotencyKey },
+    });
+    // A bill that is paid already, or whose bank changed, is QuirkBooks saying no, not a fault.
+    if (response.status === 409 || response.status === 422) return { refused: ((await response.json()) as { error: string }).error };
+    if (!response.ok) throw await this.service.failure(response);
+    return { paidAt: ((await response.json()) as { paidAt: string }).paidAt };
   }
 }

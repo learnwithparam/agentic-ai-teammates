@@ -14,8 +14,8 @@ requireSettings(["QUIRKBOOKS_URL", "QUIRKBOOKS_PORT", "QUIRKBOOKS_DATABASE_URL",
 
 const MIGRATIONS = new URL("./migrations", import.meta.url).pathname;
 
-// Mission Control's gateway reads the books and posts bills. It cannot change a vendor's bank.
-const CLIENTS = [{ name: "mission-control", scopes: ["vendors.read", "pos.read", "bills.read", "bills.write"], key: setting("QUIRKBOOKS_API_KEY") }];
+// Mission Control's gateway reads the books, posts bills and pays them. It cannot change a vendor's bank.
+const CLIENTS = [{ name: "mission-control", scopes: ["vendors.read", "pos.read", "bills.read", "bills.write", "bills.pay"], key: setting("QUIRKBOOKS_API_KEY") }];
 
 const pool = createPool(setting("QUIRKBOOKS_DATABASE_URL"));
 await migrate(pool, MIGRATIONS);
@@ -39,13 +39,28 @@ app.get("/api/v1/purchase-orders/:number", requireScope("pos.read"), async (requ
 
 app.get("/api/v1/bills", requireScope("bills.read"), async (request, response) => {
   const text = (value: unknown) => (typeof value === "string" && value ? value : undefined);
-  response.json(await books.bills({ vendorId: text(request.query.vendorId), invoiceNumber: text(request.query.invoiceNumber) }));
+  const dueBy = z.iso.date().optional().parse(text(request.query.dueBy));
+  response.json(await books.bills({ vendorId: text(request.query.vendorId), invoiceNumber: text(request.query.invoiceNumber), dueBy }));
+});
+
+app.get("/api/v1/bills/:id", requireScope("bills.read"), async (request, response) => {
+  const found = await books.bill(z.uuid().parse(request.params.id));
+  if (!found) throw new HttpError(404, "No such bill.");
+  response.json(found);
 });
 
 app.post("/api/v1/bills", requireScope("bills.write"), async (request, response) => {
   const key = request.header("Idempotency-Key");
   if (!key) throw new HttpError(400, "Post with an Idempotency-Key header, so a retry never posts twice.");
   const result = await books.postBill(NewBill.parse(request.body), request.client!.name, key);
+  response.status(result.status).json(result.body);
+});
+
+app.post("/api/v1/bills/:id/pay", requireScope("bills.pay"), async (request, response) => {
+  const key = request.header("Idempotency-Key");
+  if (!key) throw new HttpError(400, "Pay with an Idempotency-Key header, so a retry never pays twice.");
+  const { because } = z.object({ because: z.string().min(1).max(500) }).parse(request.body);
+  const result = await books.payBill(z.uuid().parse(request.params.id), because, request.client!.name, key);
   response.status(result.status).json(result.body);
 });
 

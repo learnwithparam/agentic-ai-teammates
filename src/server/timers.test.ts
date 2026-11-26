@@ -7,6 +7,7 @@ import { ensureStandingSchedules } from "./scheduler-loop";
 import { companyDay } from "./teammates/timed";
 import { testDatabase } from "./test-database";
 import { cancelTimer, fireDue, nextFire, setTimer } from "./timers";
+import { TEAMMATES } from "./teammates/registry";
 
 // Timers against a real Postgres. Each firing must reach the inbox exactly once, and a timer
 // must never start a run: it only writes an event.
@@ -87,10 +88,10 @@ test("starting the scheduler again keeps a schedule a person moved, and skips a 
   await pool.query("INSERT INTO teammates (company, id, kind, name, on_duty) VALUES ('bramble', 'scorer', 'invoice', 'Scorer', false)");
   await ensureStandingSchedules(pool);
   const { rows } = await pool.query("SELECT teammate, cron, timezone FROM timers WHERE name = 'digest' ORDER BY teammate");
-  assert.deepEqual(rows, [
-    { teammate: "invoices", cron: "0 18 * * 1-5", timezone: "Europe/Amsterdam" },
-    { teammate: "news", cron: "0 18 * * 1-5", timezone: "Europe/Amsterdam" },
-  ]);
+  // Every registered teammate with a digest gets one, and the off-duty scorer does not.
+  const withDigest = TEAMMATES.filter((teammate) => teammate.capabilities.digest).map((teammate) => teammate.id).sort();
+  assert.ok(withDigest.includes("invoices"));
+  assert.deepEqual(rows, withDigest.map((teammate) => ({ teammate, cron: "0 18 * * 1-5", timezone: "Europe/Amsterdam" })));
   await pool.query("UPDATE timers SET cron = '0 9 * * 1-5' WHERE teammate = 'invoices' AND name = 'digest'");
   await ensureStandingSchedules(pool);
   assert.equal((await pool.query("SELECT cron FROM timers WHERE teammate = 'invoices' AND name = 'digest'")).rows[0].cron, "0 9 * * 1-5");

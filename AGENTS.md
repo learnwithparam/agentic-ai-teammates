@@ -17,6 +17,7 @@ run the flow, then remove one named guard and watch its test fail. There are no 
 - Secrets are written to `.env` by `npm run setup` and never printed or passed on a command line.
 - Dependencies are pinned exactly.
 - Code passes `scripts/readable.ts`; pages pass `scripts/plain-english.ts`.
+- A new teammate starts from `npm run teammate:new` and the `new-teammate` skill; `docs/teammates.md` is its field reference.
 
 ## Gate
 

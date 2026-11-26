@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Accounting } from "../adapters/types";
 import { payloadHash } from "../canonical";
 import { checkInvoice, Invoice, PO_TOLERANCE, type Reason, REASONS } from "../checks";
+import { daysAfter, payProblems, runTotal } from "../payments";
 import { COMPANIES } from "../people";
 import { askerAsPerson, Authority } from "./asker";
 import { defineTool, readTool, type ToolContext } from "./define";
@@ -28,6 +29,18 @@ export const PostBillArgs = z.object({
   source: InvoiceSource,
   brief: z.string().min(1).max(1500).nullable(),
   requestId: z.uuid().nullable().optional(),
+});
+
+const WithinDays = z.number().int().min(0).max(31);
+const DueBillsArgs = z.object({ day: z.iso.date(), withinDays: WithinDays });
+
+// A pay run names its bills and the total and currency a person approves. The guard checks all
+// three against the books, so the amount on the card is never the model's or the caller's word.
+export const PayBillArgs = z.object({
+  day: z.iso.date(),
+  billIds: z.array(z.uuid()).min(1).max(20),
+  total: z.number().positive(),
+  currency: z.string().regex(/^[A-Z]{3}$/),
 });
 
 const Request = z.object({ requestId: z.uuid(), from: z.string(), source: InvoiceSource, authority: Authority });
@@ -119,6 +132,52 @@ export const booksTools = {
       );
       if ("duplicateOf" in posted) return { status: "done", result: { posted: false, duplicateOf: posted.duplicateOf } };
       return { status: "done", result: { posted: true, billId: posted.id, total: posted.total } };
+    },
+  }),
+  "books.due_bills": readTool(
+    "List the open bills due within some days of a day, overdue ones included, with the bank each one pays.",
+    DueBillsArgs,
+    async (ctx, args) => ({ bills: await ctx.deps.books.dueBills(daysAfter(args.day, args.withinDays)) }),
+  ),
+  "books.pay_bill": defineTool({
+    description: "Pay a run of open bills in QuirkBooks, once a person approves the run.",
+    args: PayBillArgs,
+    // Money leaves the company, so a person decides every run, under their own approval limit.
+    decision: "approve",
+    readOnly: false,
+    guard: async (ctx, args) => {
+      if (new Set(args.billIds).size !== args.billIds.length) return { deny: "The pay run names a bill twice." };
+      const currency = COMPANIES[ctx.scope.company].currency;
+      if (args.currency !== currency) return { deny: `A pay run is in ${currency}, the company's currency.` };
+      const bills = await Promise.all(args.billIds.map((id) => ctx.deps.books.bill(id)));
+      const missing = args.billIds.filter((_, index) => !bills[index]);
+      if (missing.length) return { deny: `QuirkBooks has no bill ${missing.join(", ")}.` };
+      const found = bills.map((bill) => bill!);
+      const problems = found.flatMap((bill) => payProblems(bill, currency).map((problem) => `${bill.vendor} ${bill.invoiceNumber}: ${problem}`));
+      if (problems.length) return { deny: problems.join(" ") };
+      // The card's amount is what a person's approval limit is checked against, so it must be the books' own sum.
+      const sum = runTotal(found);
+      if (sum !== args.total) return { deny: `The bills add up to ${sum.toFixed(2)}, not ${args.total.toFixed(2)}.` };
+      return {};
+    },
+    card: (args) => ({
+      title: `Pay run for ${args.day}: ${args.billIds.length} ${args.billIds.length === 1 ? "bill" : "bills"}`,
+      brief: "Every bill is open, in the company's currency, and goes to the bank account it was posted with.",
+      amount: args.total,
+      currency: args.currency,
+      // Every pay run is its own decision, so it can never become a standing rule.
+      canAllowAlways: false,
+    }),
+    run: async (ctx, args, grant) => {
+      const paid: string[] = [];
+      const refused: { billId: string; reason: string }[] = [];
+      for (const billId of args.billIds) {
+        // One key per bill, so a retry of an approved run never pays a bill twice.
+        const answer = await ctx.deps.books.payBill(billId, `pay:${billId}`, grant.because);
+        if ("refused" in answer) refused.push({ billId, reason: answer.refused });
+        else paid.push(billId);
+      }
+      return { status: "done", result: { paid, refused } };
     },
   }),
 };

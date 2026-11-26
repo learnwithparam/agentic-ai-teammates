@@ -17,6 +17,7 @@ import { testDatabase } from "./test-database";
 import type { NewsShelf } from "./news-shelf";
 import { testMemory, testNewsShelf } from "./test-memory";
 import { createWebApp } from "./web-app";
+import { TEAMMATES } from "./teammates/registry";
 
 // Mission Control's web process against a real Postgres. Signing in is Keycloak's job and has
 // its own tests in auth.test.ts; here a test chooses who is signed in. OpenFGA's rules have
@@ -300,7 +301,7 @@ test("the board shows only teammates the person may view", async () => {
   assert.deepEqual(board.teammates, []);
   allow = true;
   const shown = (await (await call("/api/board")).json()) as { teammates: { id: string }[] };
-  assert.deepEqual(shown.teammates.map((mate) => mate.id).sort(), ["invoices", "news"]);
+  assert.deepEqual(shown.teammates.map((mate) => mate.id).sort(), TEAMMATES.map((teammate) => teammate.id).sort());
 });
 
 test("an approver's limit travels as the condition on their approver tuple", () => {

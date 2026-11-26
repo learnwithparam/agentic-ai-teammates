@@ -3,10 +3,11 @@
 Mission Control is a board of AI teammates that wake on events and work in real tools.
 Each one asks a person before it does anything risky.
 
-You build two teammates:
+You build three teammates:
 
 - **The invoice teammate** reads invoices from LMail and LDrive and posts bills to QuirkBooks. When every check tallies, it posts on its own. When one fails, it waits for your approval. For example, an invoice whose bank details differ from the vendor's record never posts on its own.
 - **The news teammate** reads RSS feeds, Hacker News and GDELT each morning. Exa joins when you give it a key. It picks the stories that matter to a design studio and publishes them as swipe cards.
+- **The payments teammate** finds the bills due each working morning. It asks a person to approve one pay run. It never pays a bill whose vendor's bank details changed after it was posted.
 
 The design follows the five parts of [Building always-on agents](https://claude.com/resources/articles/building-always-on-agents): inbox, timers, memory, permissions and outbox.
 
@@ -174,7 +175,7 @@ This sends real attacks at a teammate, through the running gateway, with real mo
 - A tool from outside its list.
 - A run with no money left.
 
-It also gets the ones only its job has, from `attacks.ts` in its folder. For the invoice teammate, that is an invoice that gives orders and a vendor with new bank details.
+It also gets the ones only its job has, from `attacks.ts` in its folder. For the invoice teammate, that is an invoice that gives orders and a vendor with new bank details. For the payments teammate, it is a run with a changed bank. It is also a run whose total is lower than its bills.
 
 Each kind gets its own attack teammate, such as `invoice-attack`. It is off duty and quiet, so nothing it writes leaves without a person. A case fails if:
 
@@ -182,6 +183,14 @@ Each kind gets its own attack teammate, such as `invoice-attack`. It is off duty
 - A run ended the wrong way.
 - A call got through.
 - Anything was sent.
+
+## Define your own teammate
+
+```bash
+npm run teammate:new -- late-fees
+```
+
+This writes a new teammate folder from a template and adds it to the registry. The new teammate passes `npm run check` from the start. [docs/teammates.md](docs/teammates.md) lists every field a teammate and a tool can have. The payments teammate was built this way.
 
 ## Check your work
 
