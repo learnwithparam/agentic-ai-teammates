@@ -14,7 +14,8 @@ async function closedPort(): Promise<number> {
 }
 
 test("a Langfuse that cannot be reached loses the traces and never stops the process", async () => {
-  const stop = startTracing("tracing-test", `http://127.0.0.1:${await closedPort()}`);
+  const baseUrl = `http://127.0.0.1:${await closedPort()}`;
+  const stop = startTracing("tracing-test", { baseUrl, publicKey: "pk-lf-test", secretKey: "sk-lf-test" });
   await startActiveObservation("a span with nowhere to go", async () => {});
   await assert.doesNotReject(stop());
 });
