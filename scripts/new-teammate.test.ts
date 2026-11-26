@@ -9,7 +9,10 @@ const REGISTRY = readFileSync(path.join(import.meta.dirname, "../src/server/team
 test("a new teammate gets one import and one name in the registry, and a kind is never added twice", () => {
   const added = addToRegistry(REGISTRY, "late-fees");
   assert.match(added, /^import \{ lateFees \} from "\.\/late-fees\/teammate";$/m);
-  assert.match(added, /\[invoice, news, payments, lateFees\]/);
+  // The list as it is today, so the test still passes after a learner adds their own teammate.
+  const today = REGISTRY.match(/TEAMMATES[^=]*=\s*\[([^\]]*)\]/)?.[1];
+  assert.ok(today?.includes("invoice"), "the registry has a TEAMMATES list");
+  assert.ok(added.includes(`[${today}, lateFees]`), "lateFees comes after the teammates already listed");
   assert.throws(() => addToRegistry(added, "late-fees"), /already lists lateFees/);
 });
 
