@@ -25,6 +25,11 @@ export function describeError(error: unknown): string {
 export function createPool(connectionString: string, searchPath?: string): pg.Pool {
   const pool = new pg.Pool({ connectionString, max: 10, options: searchPath ? `-c search_path=${searchPath}` : undefined });
   pool.on("error", (error) => console.error(`A database connection dropped: ${error.message}`));
+  // The pool stops listening while a connection is checked out, so each one gets its own handler.
+  // The query in flight still fails, and the code that holds it decides what to do.
+  pool.on("connect", (client) => {
+    client.on("error", (error) => console.error(`A database connection in use dropped: ${error.message}`));
+  });
   return pool;
 }
 
