@@ -18,7 +18,7 @@ Last, you can point the invoice teammate at a real Gmail inbox and Google Drive.
 
 ## Starting point
 
-The stack from [Start the stack](start-the-stack.md) is running. You have a server with Docker.
+The stack from [Start the stack](00-start-the-stack.md) is running. You have a server with Docker.
 
 You also have a domain, such as `example.com`. DNS records point its names at the server. DNS is the service that maps a name to a server address.
 The names are the domain itself, plus four more:
@@ -85,7 +85,7 @@ docker compose -f deploy/docker-compose.yml ps
 
 Expect: `ps` lists every process as Up. The five with a web port show healthy.
 
-Send an invoice as in [Meet the apps your teammates work in](meet-the-world.md), and the worker takes it.
+Send an invoice as in [Meet the apps your teammates work in](01-meet-the-world.md), and the worker takes it.
 
 On the server, clone the repo. Add your OpenRouter key, then run `npm run setup`.
 

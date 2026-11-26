@@ -31,7 +31,7 @@ Each row in this table is one node, in the order it runs:
 | `screen` | A model call that looks for instructions hidden in the invoice. |
 | `extract` | Reads the PDF text and fills an `Invoice` with a model call. |
 | `lookup` | Gets the vendor, purchase order and past bills from QuirkBooks. |
-| `checks` | The plain checks from [Check every invoice before it posts](check-before-you-post.md). |
+| `checks` | The plain checks from [Check every invoice before it posts](05-check-before-you-post.md). |
 | `recall`, `investigate`, `write_brief` | Only when a check fails: read memory, look around, write a brief for a person. |
 | `post` | Posts the bill, or asks for an approval. |
 | `notify` | Replies to the vendor through the outbox. |

@@ -56,7 +56,7 @@ Required:
 
 ## Test it
 
-Run the stack first, as in [Start the stack](../../docs/learner/start-the-stack.md). Then run:
+Run the stack first, as in [Start the stack](../../docs/learner/00-start-the-stack.md). Then run:
 
 ```bash
 npx tsx --test apps/lmail/store.test.ts apps/lmail/page-shapes.test.ts
@@ -68,8 +68,8 @@ The store tests cover the watch address and search. The page test covers mailbox
 
 ## Lessons that use LMail
 
-- [Meet the apps your teammates work in](../../docs/learner/meet-the-world.md)
-- [Catch every event in a durable inbox](../../docs/learner/catch-every-event.md)
-- [Read an invoice with a graph you can trace](../../docs/learner/read-an-invoice.md)
-- [Send safely, then score the teammate](../../docs/learner/send-safely-and-score.md)
-- [Deploy the teammates to a server](../../docs/learner/deploy-for-real.md)
+- [Meet the apps your teammates work in](../../docs/learner/01-meet-the-world.md)
+- [Catch every event in a durable inbox](../../docs/learner/02-catch-every-event.md)
+- [Read an invoice with a graph you can trace](../../docs/learner/04-read-an-invoice.md)
+- [Send safely, then score the teammate](../../docs/learner/10-send-safely-and-score.md)
+- [Deploy the teammates to a server](../../docs/learner/11-deploy-for-real.md)

@@ -14,7 +14,7 @@ You release a quiet teammate's draft and see the dispatcher pace and retry. Then
 
 ## Starting point
 
-The stack is running. The news edition from [Publish the morning news](publish-the-morning-news.md) went through the outbox.
+The stack is running. The news edition from [Publish the morning news](09-publish-the-morning-news.md) went through the outbox.
 
 ## How it works
 

@@ -36,20 +36,20 @@ Every lesson runs on `main` with the stack up. You read the files and run the re
 
 | What you can do after it |
 | --- |
-| [Start the stack](./docs/learner/start-the-stack.md) |
-| [Meet the apps your teammates work in](./docs/learner/meet-the-world.md) |
-| [Catch every event in a durable inbox](./docs/learner/catch-every-event.md) |
-| [Bound the agent loop](./docs/learner/bound-the-agent-loop.md) |
-| [Read an invoice with a graph you can trace](./docs/learner/read-an-invoice.md) |
-| [Check every invoice before it posts](./docs/learner/check-before-you-post.md) |
-| [Ask a person before a risky action](./docs/learner/ask-before-acting.md) |
-| [Route each call to the right model](./docs/learner/route-to-the-right-model.md) |
-| [Follow up on time and remember what people decided](./docs/learner/remember-and-follow-up.md) |
-| [Publish the morning news](./docs/learner/publish-the-morning-news.md) |
-| [Send safely, then score the teammate](./docs/learner/send-safely-and-score.md) |
-| [Deploy the teammates to a server](./docs/learner/deploy-for-real.md) |
-| [Build a payments teammate from one definition](./docs/learner/build-a-payments-teammate.md) |
-| [Talk to a teammate and hand it work](./docs/learner/talk-to-a-teammate.md) |
+| [Start the stack](./docs/learner/00-start-the-stack.md) |
+| [Meet the apps your teammates work in](./docs/learner/01-meet-the-world.md) |
+| [Catch every event in a durable inbox](./docs/learner/02-catch-every-event.md) |
+| [Bound the agent loop](./docs/learner/03-bound-the-agent-loop.md) |
+| [Read an invoice with a graph you can trace](./docs/learner/04-read-an-invoice.md) |
+| [Check every invoice before it posts](./docs/learner/05-check-before-you-post.md) |
+| [Ask a person before a risky action](./docs/learner/06-ask-before-acting.md) |
+| [Route each call to the right model](./docs/learner/07-route-to-the-right-model.md) |
+| [Follow up on time and remember what people decided](./docs/learner/08-remember-and-follow-up.md) |
+| [Publish the morning news](./docs/learner/09-publish-the-morning-news.md) |
+| [Send safely, then score the teammate](./docs/learner/10-send-safely-and-score.md) |
+| [Deploy the teammates to a server](./docs/learner/11-deploy-for-real.md) |
+| [Build a payments teammate from one definition](./docs/learner/12-build-a-payments-teammate.md) |
+| [Talk to a teammate and hand it work](./docs/learner/13-talk-to-a-teammate.md) |
 
 ## Start
 

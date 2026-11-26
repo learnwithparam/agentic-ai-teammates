@@ -128,7 +128,7 @@ function renderProblems(file: string, page: string): string[] {
 }
 
 export function lessonFiles(): string[] {
-  return readdirSync(LESSONS).filter((name) => name.endsWith(".md")).sort().map((name) => `${LESSONS}/${name}`);
+  return readdirSync(LESSONS).filter((name) => /^\d\d-.*\.md$/.test(name)).sort().map((name) => `${LESSONS}/${name}`);
 }
 
 const readIfThere = (path: string) => (existsSync(path) ? readFileSync(path, "utf8") : null);

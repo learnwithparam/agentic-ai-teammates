@@ -88,7 +88,7 @@ services:
       timeout: 5s
       retries: 20
 
-  # S3 on this machine. In production the same code points at R2 or S3 (see docs/learner/deploy-for-real.md).
+  # S3 on this machine. In production the same code points at R2 or S3 (see docs/learner/11-deploy-for-real.md).
   minio:
     # MinIO stopped publishing its own images in 2025. Chainguard builds each release (Langfuse's
     # compose file uses the same image); the digest pins one build.

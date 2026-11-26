@@ -16,7 +16,7 @@ A clean invoice posts with no click, and each kind of bad invoice waits with its
 
 ## Starting point
 
-The stack is running. You have seen one invoice go through in [Read an invoice with a graph you can trace](read-an-invoice.md).
+The stack is running. You have seen one invoice go through in [Read an invoice with a graph you can trace](04-read-an-invoice.md).
 
 ## How it works
 

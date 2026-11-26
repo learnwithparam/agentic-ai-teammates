@@ -270,7 +270,7 @@ function isTeachingPage(file: string): boolean {
   const isStepReadme = /problem\/README\.md$/.test(path);
   const isPartReadme = /^parts\/[^/]+\/README\.md$/.test(path);
   // Lessons and app readmes are teaching pages too: each gives one real example.
-  const isLesson = /^docs\/learner\/[^/]+\.md$/.test(path);
+  const isLesson = /^docs\/learner\/\d\d-[^/]+\.md$/.test(path);
   const isAppReadme = /^apps\/[^/]+\/README\.md$/.test(path);
   return isStepReadme || isPartReadme || isLesson || isAppReadme || path === "README.md";
 }

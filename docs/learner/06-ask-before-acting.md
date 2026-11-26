@@ -15,7 +15,7 @@ You approve one held invoice and deny another. You see who may decide what, and 
 
 ## Starting point
 
-The stack is running, and two invoices wait in Needs approval from [Check every invoice before it posts](check-before-you-post.md).
+The stack is running, and two invoices wait in Needs approval from [Check every invoice before it posts](05-check-before-you-post.md).
 
 ## How it works
 

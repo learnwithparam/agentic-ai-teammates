@@ -60,7 +60,7 @@ Names only. Each one is a line in `.env`.
 
 ## Test it
 
-Run the stack first, as in [Start the stack](../../docs/learner/start-the-stack.md). Then run:
+Run the stack first, as in [Start the stack](../../docs/learner/00-start-the-stack.md). Then run:
 
 ```bash
 npx tsx --test apps/ldrive/page-shapes.test.ts
@@ -70,6 +70,6 @@ Expect: the test passes. It checks that the page reads the folders and a folder'
 
 ## Lessons that use LDrive
 
-- [Meet the apps your teammates work in](../../docs/learner/meet-the-world.md)
-- [Read an invoice with a graph you can trace](../../docs/learner/read-an-invoice.md)
-- [Deploy the teammates to a server](../../docs/learner/deploy-for-real.md)
+- [Meet the apps your teammates work in](../../docs/learner/01-meet-the-world.md)
+- [Read an invoice with a graph you can trace](../../docs/learner/04-read-an-invoice.md)
+- [Deploy the teammates to a server](../../docs/learner/11-deploy-for-real.md)

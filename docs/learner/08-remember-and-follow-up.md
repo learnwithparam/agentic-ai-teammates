@@ -13,7 +13,7 @@ You see the reminder an approval sets and the daily schedules. You also see a ve
 
 ## Starting point
 
-The stack is running. At least one approval was decided in [Ask a person before a risky action](ask-before-acting.md).
+The stack is running. At least one approval was decided in [Ask a person before a risky action](06-ask-before-acting.md).
 
 ## How it works
 
@@ -42,7 +42,7 @@ The first three load every run. Notes and progress are read only when a run need
 Once a week the teammate tidies its notes. The article calls this "dreaming".
 It proposes a shorter note as a draft in the outbox. The note changes only after a person reads the new lines and sends them.
 
-A teammate can also set a timer for itself with `team.follow_up`. It can set one at most 14 days ahead. [Talk to a teammate and hand it work](talk-to-a-teammate.md) shows one.
+A teammate can also set a timer for itself with `team.follow_up`. It can set one at most 14 days ahead. [Talk to a teammate and hand it work](13-talk-to-a-teammate.md) shows one.
 
 Facts that live in QuirkBooks or LMail stay there. Memory never copies them.
 

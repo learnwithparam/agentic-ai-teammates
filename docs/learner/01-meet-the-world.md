@@ -16,7 +16,7 @@ You send a real invoice by mail and see it land in LMail. You also see QuirkBook
 
 ## Starting point
 
-The stack from [Start the stack](start-the-stack.md) is running, and you are signed in as Ada.
+The stack from [Start the stack](00-start-the-stack.md) is running, and you are signed in as Ada.
 
 ## How it works
 

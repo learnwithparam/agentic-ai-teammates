@@ -17,7 +17,7 @@ You hand the invoice teammate a bill as Ravi. It posts under Ravi's own approval
 
 ## Starting point
 
-The stack is running. Lessons up to [Follow up on time and remember what people decided](remember-and-follow-up.md) are done. You can sign in as Ravi, an approver whose limit is 5,000 EUR. You can also sign in as Ada.
+The stack is running. Lessons up to [Follow up on time and remember what people decided](08-remember-and-follow-up.md) are done. You can sign in as Ravi, an approver whose limit is 5,000 EUR. You can also sign in as Ada.
 
 ## How it works
 

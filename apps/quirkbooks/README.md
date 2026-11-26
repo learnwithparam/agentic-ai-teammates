@@ -47,7 +47,7 @@ A post or a payment without its `Idempotency-Key` header fails with 400. The sam
 
 ## Test it
 
-Run the stack first, as in [Start the stack](../../docs/learner/start-the-stack.md). Then run:
+Run the stack first, as in [Start the stack](../../docs/learner/00-start-the-stack.md). Then run:
 
 ```bash
 npx tsx --test apps/quirkbooks/store.test.ts apps/quirkbooks/pay.test.ts apps/quirkbooks/page-shapes.test.ts
@@ -59,8 +59,8 @@ The store tests cover posting twice with one key. The pay tests cover a changed 
 
 ## Lessons that use QuirkBooks
 
-- [Meet the apps your teammates work in](../../docs/learner/meet-the-world.md)
-- [Read an invoice with a graph you can trace](../../docs/learner/read-an-invoice.md)
-- [Check every invoice before it posts](../../docs/learner/check-before-you-post.md)
-- [Build a payments teammate from one definition](../../docs/learner/build-a-payments-teammate.md)
-- [Talk to a teammate and hand it work](../../docs/learner/talk-to-a-teammate.md)
+- [Meet the apps your teammates work in](../../docs/learner/01-meet-the-world.md)
+- [Read an invoice with a graph you can trace](../../docs/learner/04-read-an-invoice.md)
+- [Check every invoice before it posts](../../docs/learner/05-check-before-you-post.md)
+- [Build a payments teammate from one definition](../../docs/learner/12-build-a-payments-teammate.md)
+- [Talk to a teammate and hand it work](../../docs/learner/13-talk-to-a-teammate.md)

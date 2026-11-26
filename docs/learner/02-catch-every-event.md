@@ -16,7 +16,7 @@ You see a notice stored once, even when it is delivered twice. Exactly one worke
 
 ## Starting point
 
-The stack is running. You have sent at least one invoice in [Meet the apps your teammates work in](meet-the-world.md).
+The stack is running. You have sent at least one invoice in [Meet the apps your teammates work in](01-meet-the-world.md).
 
 ## How it works
 
