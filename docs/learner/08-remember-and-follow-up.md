@@ -28,7 +28,16 @@ A scheduler that was down for days fires a schedule once, not once per missed ti
 It holds only what cannot be looked up again:
 
 - `instructions.md`: what a person wants the teammate to know. An admin edits it in Settings, and every run reads it.
+- `index.md`: one line per note, so a run knows what it can look up. The gateway keeps it, never a model.
+- `reported.md`: what the teammate already told each person. A teammate never tells a person the same thing twice.
 - `notes/vendor-<id>.md`: one note per vendor, written from each decision a person made. A note keeps its newest 30 lines.
+- `progress/<task>.md`: where a task that spans runs got to, such as a follow-up.
+
+The first three load every run. Notes and progress are read only when a run needs them.
+
+Once a week the teammate tidies its notes, the article's "dreaming". It proposes a shorter note as a draft in the outbox. The note changes only after a person reads the new lines and sends them.
+
+A teammate can also set a timer for itself with `team.follow_up`, at most 14 days ahead. Lesson 13 shows one.
 
 Facts that live in QuirkBooks or LMail stay there. Memory never copies them.
 

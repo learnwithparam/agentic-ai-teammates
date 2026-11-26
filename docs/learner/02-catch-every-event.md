@@ -31,6 +31,14 @@ Each claim has a lease. If the worker dies, the lease runs out and the next clai
 
 After the last allowed attempt, the event is marked dead instead of looping forever.
 
+The article names three spans of time, and this repo uses its words:
+
+- A **run** is one batch of events, worked from start to end by one worker.
+- A **session** is a thread that can span runs, such as one invoice waiting for a person. LangGraph saves it, and the next run carries on from where it stopped.
+- A **cycle** is the loop of inbox, run and outbox that repeats all day.
+
+A batch can hold three quick messages from one person. They get one answer, written from all three, not three answers.
+
 ```mermaid
 sequenceDiagram
   participant LMail

@@ -24,6 +24,8 @@ Every run has the same shape:
 3. Every model call and tool call goes through the gateway, which counts tokens and dollars.
 4. It ends with one stop reason: `sent`, `nothing_to_send`, `deferred`, `handed_to_human` or `failed`.
 
+The gateway is the article's credential proxy. The worker holds no key to QuirkBooks, LMail or the model provider. It holds one token that lets it ask the gateway, and the gateway holds the rest. A run that is talked into a bad call can only ask, and the gateway can say no.
+
 The limits sit in `RUN_CAPS`: 8 tool steps, 150,000 tokens and 10 US cents per run.
 Breaking any of them ends the run as `handed_to_human`. It never retries on its own.
 

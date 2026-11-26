@@ -38,6 +38,8 @@ Every lesson runs on `main` with the stack up. You read the files and run the re
 | 09 | [Publish the morning news](./docs/learner/09-publish-the-morning-news.md) |
 | 10 | [Send safely, then score the teammate](./docs/learner/10-send-safely-and-score.md) |
 | 11 | [Deploy the teammates to a server](./docs/learner/11-deploy-for-real.md) |
+| 12 | [Build a payments teammate from one definition](./docs/learner/12-build-a-payments-teammate.md) |
+| 13 | [Talk to a teammate and hand it work](./docs/learner/13-talk-to-a-teammate.md) |
 
 ## Start
 

@@ -23,6 +23,10 @@ A run never sends anything. Its tools write a row to the outbox, in `src/server/
 - **Retries.** A failure a retry can fix waits 20 seconds, then twice as long each time. It stops after 6 attempts. One it cannot fix is dead at once, with its reason.
 - **Idempotency.** Every message carries a key, so a resend after a crash is the same send.
 
+Turning quiet off is a decision you make from evidence.
+
+Settings shows the last 14 days. It counts what the teammate sent on its own, and what people released or discarded. It also counts what still waits. Each teammate also has an eval, run with `npm run teammate:eval -- <kind>`. Its score must hold before quiet goes off.
+
 ```mermaid
 sequenceDiagram
   participant Run

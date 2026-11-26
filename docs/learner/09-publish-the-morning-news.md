@@ -23,7 +23,7 @@ The news teammate is a graph in `src/server/teammates/news/graph.ts`:
 | `collect` | Reads RSS feeds, Hacker News and GDELT, plus Exa when it has a key. Drops stories published before. |
 | `dedupe` | Keeps the first of each story: the same link, or the same headline from two sources. Plain code. |
 | `select` | A deeper-look model call picks up to five stories. |
-| `write` | Reads each article and writes one card: a headline, three points and why it matters. |
+| `write` | Screens each article for instructions aimed at an AI. Then it writes one card: a headline, three points and why it matters. |
 | `check` | Plain checks on every card. |
 | `publish` | Hands the edition to the outbox through the gateway. |
 
