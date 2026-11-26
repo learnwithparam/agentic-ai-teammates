@@ -17,6 +17,7 @@
     "invoices:make": "tsx data/invoices/make.ts",
     "invoices:send": "tsx data/invoices/send.ts",
     "invoices:run": "tsx data/invoices/run.ts",
+    "demo:reset": "tsx scripts/demo-reset.ts",
     "teammate:eval": "tsx scripts/eval.ts",
     "teammate:attack": "tsx scripts/attack.ts",
     "teammate:new": "tsx scripts/new-teammate.ts",

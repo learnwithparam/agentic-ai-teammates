@@ -68,6 +68,7 @@ const SETTINGS = {
   GMAIL_ADDRESS: "For gmail. The Gmail address the accounts team reads, the one you allowed access as.",
   GMAIL_PUBSUB_TOPIC: "For gmail. The Pub/Sub topic Gmail publishes to, as projects/<project>/topics/<topic>.",
   GMAIL_PUSH_SERVICE_ACCOUNT: "For gmail. The service account the Pub/Sub push subscription signs its tokens as.",
+  DEMO_RESET: "Optional. Set it to yes on a demo machine only. npm run demo:reset then empties Mission Control and the world apps.",
   EXA_API_KEY: "Optional. An Exa key, from dashboard.exa.ai, turns on Exa as a news source.",
 } as const;
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import nodemailer from "nodemailer";
 import { requireSettings, setting } from "../../src/server/env";
 import { INVOICE_FOLDER } from "../../src/server/teammates/invoice/work";
-import { CASES } from "./cases";
+import { CASES, type InvoiceCase } from "./cases";
 import { fileName } from "./render";
 
 // npm run invoices:send [-- 05-lumen-maths-error ...]
@@ -14,20 +14,24 @@ import { fileName } from "./render";
 // named, it sends them all. Nothing here talks to Mission Control: the teammate finds the work
 // the way it would in production.
 
-requireSettings(["LMAIL_SMTP_PORT", "LDRIVE_URL", "LDRIVE_UPLOAD_KEY"]);
-
 const folder = path.join(path.dirname(fileURLToPath(import.meta.url)), "files");
-const named = process.argv.slice(2);
-const chosen = named.length ? CASES.filter((invoice) => named.includes(invoice.id)) : CASES;
-const unknown = named.filter((id) => !CASES.some((invoice) => invoice.id === id));
-if (unknown.length) throw new Error(`There is no case called ${unknown.join(", ")}.`);
 
-const smtp = nodemailer.createTransport({ host: "localhost", port: Number(setting("LMAIL_SMTP_PORT")), secure: false, ignoreTLS: true });
-const drive = setting("LDRIVE_URL");
-const driveHeaders = { authorization: `Bearer ${setting("LDRIVE_UPLOAD_KEY")}` };
+export const SEND_SETTINGS = ["LMAIL_SMTP_PORT", "LDRIVE_URL", "LDRIVE_UPLOAD_KEY"] as const;
 
-async function invoiceFolderId(): Promise<string> {
-  const response = await fetch(`${drive}/api/v1/folders`, { headers: driveHeaders });
+// The cases by name, or every case when none is named. An unknown name is an error, not a skip.
+export function casesNamed(named: string[]): InvoiceCase[] {
+  const unknown = named.filter((id) => !CASES.some((invoice) => invoice.id === id));
+  if (unknown.length) throw new Error(`There is no case called ${unknown.join(", ")}.`);
+  return named.length ? CASES.filter((invoice) => named.includes(invoice.id)) : CASES;
+}
+
+function driveAccess() {
+  return { drive: setting("LDRIVE_URL"), headers: { authorization: `Bearer ${setting("LDRIVE_UPLOAD_KEY")}` } };
+}
+
+export async function invoiceFolderId(): Promise<string> {
+  const { drive, headers } = driveAccess();
+  const response = await fetch(`${drive}/api/v1/folders`, { headers });
   if (!response.ok) throw new Error(`LDrive did not list its folders: ${response.status}.`);
   const folders = (await response.json()) as { id: string; name: string }[];
   const found = folders.find((entry) => entry.name === INVOICE_FOLDER);
@@ -35,26 +39,42 @@ async function invoiceFolderId(): Promise<string> {
   return found.id;
 }
 
-const folderId = chosen.some((invoice) => invoice.channel === "drive") ? await invoiceFolderId() : null;
-
-for (const invoice of chosen) {
-  const file = path.join(folder, fileName(invoice.id, invoice.channel));
-  if (invoice.channel === "drive") {
-    const name = `${invoice.vendor.name} ${invoice.number}.pdf`;
-    const response = await fetch(`${drive}/api/v1/folders/${folderId}/files?name=${encodeURIComponent(name)}`, {
-      method: "POST",
-      headers: { ...driveHeaders, "content-type": "application/pdf" },
-      body: readFileSync(file),
-    });
-    if (!response.ok) throw new Error(`LDrive refused ${invoice.id}: ${response.status} ${await response.text()}`);
-    console.log(`Uploaded ${invoice.id} to LDrive.`);
-    continue;
-  }
-  const subject = `Invoice ${invoice.number} from ${invoice.vendor.name}`;
-  const from = `"${invoice.vendor.name}" <${invoice.from ?? invoice.vendor.email}>`;
-  const body = invoice.channel === "mail-body" ? readFileSync(file, "utf8") : `Hello,\n\nPlease find invoice ${invoice.number} attached.\n\n${invoice.vendor.name}`;
-  const attachments = invoice.channel === "mail-pdf" ? [{ filename: `${invoice.number}.pdf`, path: file, contentType: "application/pdf" }] : [];
-  await smtp.sendMail({ from, to: "ap@bramble.example", subject, text: body, attachments });
-  console.log(`Mailed ${invoice.id} to ap@bramble.example.`);
+export function smtpTransport() {
+  return nodemailer.createTransport({ host: "localhost", port: Number(setting("LMAIL_SMTP_PORT")), secure: false, ignoreTLS: true });
 }
-smtp.close();
+
+// Mails each mail case to Bramble's accounts mailbox and uploads each drive case to LDrive.
+export async function sendCases(chosen: InvoiceCase[]) {
+  const { drive, headers } = driveAccess();
+  const folderId = chosen.some((invoice) => invoice.channel === "drive") ? await invoiceFolderId() : null;
+  const smtp = smtpTransport();
+  try {
+    for (const invoice of chosen) {
+      const file = path.join(folder, fileName(invoice.id, invoice.channel));
+      if (invoice.channel === "drive") {
+        const name = `${invoice.vendor.name} ${invoice.number}.pdf`;
+        const response = await fetch(`${drive}/api/v1/folders/${folderId}/files?name=${encodeURIComponent(name)}`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/pdf" },
+          body: readFileSync(file),
+        });
+        if (!response.ok) throw new Error(`LDrive refused ${invoice.id}: ${response.status} ${await response.text()}`);
+        console.log(`Uploaded ${invoice.id} to LDrive.`);
+        continue;
+      }
+      const subject = `Invoice ${invoice.number} from ${invoice.vendor.name}`;
+      const from = `"${invoice.vendor.name}" <${invoice.from ?? invoice.vendor.email}>`;
+      const body = invoice.channel === "mail-body" ? readFileSync(file, "utf8") : `Hello,\n\nPlease find invoice ${invoice.number} attached.\n\n${invoice.vendor.name}`;
+      const attachments = invoice.channel === "mail-pdf" ? [{ filename: `${invoice.number}.pdf`, path: file, contentType: "application/pdf" }] : [];
+      await smtp.sendMail({ from, to: "ap@bramble.example", subject, text: body, attachments });
+      console.log(`Mailed ${invoice.id} to ap@bramble.example.`);
+    }
+  } finally {
+    smtp.close();
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  requireSettings([...SEND_SETTINGS]);
+  await sendCases(casesNamed(process.argv.slice(2)));
+}

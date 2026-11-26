@@ -79,6 +79,14 @@ The password is `SEED_USER_PASSWORD` in `.env`.
 
 ![Mission Control after sign-in](../images/board.png)
 
+To give a demo, start from a clean morning:
+
+```bash
+npm run demo:reset
+```
+
+It empties the teammates' work and sends six invoices, so every demo starts the same way. It runs only when `.env` has `DEMO_RESET=yes`.
+
 ## Break it
 
 An empty value is as bad as a missing one. With `OPENROUTER_API_KEY=` and nothing after it, the gateway would start. Then it would fail on the first call.

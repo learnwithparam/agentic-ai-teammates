@@ -121,6 +121,18 @@ With no case named, it sends them all. Mail cases go by SMTP to ap@bramble.examp
 
 After changing `data/invoices/cases.ts`, write the files again with `npm run invoices:make`.
 
+## Start a demo from a clean morning
+
+```bash
+npm run demo:reset
+```
+
+It empties every teammate's work: runs, cards, timers, chats, memory, mail, files and bills. Then it puts back the seed data and sends six invoices. Two post and are due soon, so the invoice teammate asks the payments teammate to pay them. One waits for you, one has new bank details, and one tries to give the teammate orders.
+
+Sign-ins, members and mailboxes stay, so nothing needs a restart.
+
+It only runs on a machine whose `.env` has `DEMO_RESET=yes`. It refuses while the teammates read Gmail or Google Drive.
+
 ## Read the morning news
 
 The news teammate starts at seven on working mornings. It collects the last two days of stories and drops the ones it published before. Then it picks up to five, reads each article and writes one card per story. Each card links only to a story a source gave that day. The gateway refuses any other link.
