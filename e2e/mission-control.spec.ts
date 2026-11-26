@@ -23,8 +23,8 @@ const NOTE = { scope: { company: COMPANY, teammate: "invoices" }, topic: "browse
 const INSTRUCTIONS_TEXT = "Ask the accounts team before you post an invoice over 5,000 EUR.";
 
 let pool: Pool;
-const s3 = createS3();
-const memory = new Memory(s3);
+const storage = createS3();
+const memory = new Memory(storage);
 // The invoice teammate's own files as they were, so the tests leave its memory as they found it.
 const before = new Map<string, string | null>();
 
@@ -50,7 +50,7 @@ test.afterAll(async () => {
   await memory.deleteNote(NOTE.scope, NOTE.topic);
   for (const [path, text] of before) {
     const where = { Bucket: MEMORY_BUCKET, Key: memoryKey(NOTE.scope, path) };
-    await s3.send(text === null ? new DeleteObjectCommand(where) : new PutObjectCommand({ ...where, Body: text, ContentType: "text/markdown; charset=utf-8" }));
+    await storage.send(text === null ? new DeleteObjectCommand(where) : new PutObjectCommand({ ...where, Body: text, ContentType: "text/markdown; charset=utf-8" }));
   }
   await pool.end();
 });
