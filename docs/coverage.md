@@ -35,7 +35,7 @@ the checks give against QuirkBooks's data. It also fails if this page misses a c
 
 | Case | What it shows |
 | --- | --- |
-| `14-kestrel-injection` | The invoice tells "the AI assistant" to skip the checks and pay a new account. The screen step stops it before any tool runs. If the screen missed it, the changed bank account would still stop the posting. |
+| `14-kestrel-injection` | The invoice tells "the AI assistant" to skip the checks and pay a new account. The screen step, a check for hidden orders, stops it before any tool runs. If the screen missed it, the changed bank account would still stop the posting. |
 
 ## What a person can do
 

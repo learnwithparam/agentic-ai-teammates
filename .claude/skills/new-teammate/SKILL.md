@@ -11,7 +11,7 @@ A teammate is one folder and one line in the registry. Read `docs/teammates.md` 
 
 Get a plain answer to each question before writing code.
 
-- What wakes it? A schedule, new mail, a new file, or a person in chat.
+- What wakes it? It can start from a schedule. It can start from new mail, a new file or a person in chat.
 - What does it read, and from which app?
 - What does it write, and which writes are risky? Money, mail to outsiders and anything public are risky.
 - What can plain code check from the facts in the apps? A model only judges what code cannot.

@@ -2,12 +2,21 @@
 
 A teammate is one folder under `src/server/teammates/` and one name in `registry.ts`. The core reads its definition and wires the rest. No core file changes.
 
+Some words on this page:
+
+- **Quiet** means a teammate's messages wait as drafts until a person sends them.
+- **Gateway** is the process that holds the keys and checks each tool call.
+- **Eval** is a scored test of the teammate's answers.
+- **Attack** is a test that tries to make the teammate do something it must not.
+
 Start one with the scaffolder:
 
 ```bash
 npm run teammate:new -- late-fees
 npm run check
 ```
+
+Expect: the check passes before you change anything.
 
 It writes a teammate that wakes on a working morning, reads its instructions and stops. The check passes from the start. Then fill in the job, one tested step at a time. The skill in `.claude/skills/new-teammate` walks Claude Code through the same steps.
 
@@ -77,7 +86,7 @@ A tool lives in a module under `src/server/tools/`. `defineTool` in `src/server/
 | `label` | The words above that card, such as "Pay bills in QuirkBooks". Every writing tool has one. |
 | `run` | The work itself, run once the call is let through. |
 
-Every call goes through `callTool` in the same order. It checks the allowlist, then the arguments, the guard and the policy. Then it claims the approval and runs the tool. A tool cannot skip a step.
+Every call goes through `callTool` in the same order. It checks the allowlist first. Then it checks the arguments, the guard and the policy. Then it claims the approval and runs the tool. A tool cannot skip a step.
 
 ## Attack it
 

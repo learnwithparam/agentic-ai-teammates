@@ -24,7 +24,7 @@
     "teammate:new": "tsx scripts/new-teammate.ts",
     "e2e": "playwright test",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' 'apps/**/*.test.ts' 'data/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md docs/coverage.md docs/teammates.md docs/article-map.md docs/learner/*.md .claude/skills/new-teammate/SKILL.md && tsx scripts/lessons.ts && tsx scripts/check-repo.ts && npm --prefix news run check && npm run build",
+    "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' 'apps/**/*.test.ts' 'data/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md docs/coverage.md docs/teammates.md docs/article-map.md docs/learner/*.md apps/*/README.md .claude/skills/new-teammate/SKILL.md && tsx scripts/lessons.ts && tsx scripts/check-repo.ts && npm --prefix news run check && npm run build",
     "scheduler": "tsx src/server/scheduler.ts",
     "dispatcher": "tsx src/server/dispatcher.ts",
     "build": "vite build && npm --prefix news run build"

@@ -269,7 +269,10 @@ function isTeachingPage(file: string): boolean {
   const path = relative(ROOT, file);
   const isStepReadme = /problem\/README\.md$/.test(path);
   const isPartReadme = /^parts\/[^/]+\/README\.md$/.test(path);
-  return isStepReadme || isPartReadme || path === "README.md";
+  // Lessons and app readmes are teaching pages too: each gives one real example.
+  const isLesson = /^docs\/learner\/[^/]+\.md$/.test(path);
+  const isAppReadme = /^apps\/[^/]+\/README\.md$/.test(path);
+  return isStepReadme || isPartReadme || isLesson || isAppReadme || path === "README.md";
 }
 
 function hardWordProblems(file: string, prose: string): Problem[] {
@@ -283,6 +286,16 @@ function hardWordProblems(file: string, prose: string): Problem[] {
     }
   }
   return problems;
+}
+
+// The curriculum rule: at most one comma in a sentence. A comma inside a number (2,088.00) is not counted.
+const MOST_COMMAS = 1;
+function commaProblems(file: string, sentences: string[]): Problem[] {
+  return sentences.flatMap((sentence) => {
+    const commas = sentence.replace(/(?<=\d),(?=\d)/g, "").split(",").length - 1;
+    if (commas <= MOST_COMMAS) return [];
+    return [{ file, message: `${commas} commas in one sentence; split it so it has ${MOST_COMMAS} or fewer: "${sentence.slice(0, 50)}..."` }];
+  });
 }
 
 function sentenceProblems(file: string, sentences: string[]): Problem[] {
@@ -307,6 +320,7 @@ export function problemsIn(file: string, page: string, gradeLimit: number): Prob
   const problems = [
     ...hardWordProblems(file, prose),
     ...sentenceProblems(file, sentences),
+    ...commaProblems(file, sentences),
     ...backtickProblems(file, markdown),
     ...minutesProblems(file, markdown),
   ];

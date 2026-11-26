@@ -66,11 +66,22 @@ export function breakItProblems(file: string, section: string, read: (path: stri
   return problems;
 }
 
+// Every bash block is followed by an "Expect:" line, so the reader knows what success looks like.
+export function expectProblems(file: string, page: string): string[] {
+  const lines = page.split("\n");
+  return lines.flatMap((line, index) => {
+    if (line.trim() !== "```bash") return [];
+    const close = lines.findIndex((next, at) => at > index && next.trim() === "```");
+    const after = lines.slice(close + 1).find((next) => next.trim() !== "");
+    return after?.startsWith("Expect:") ? [] : [`${file}: the bash block on line ${index + 1} needs an "Expect:" line after it`];
+  });
+}
+
 export function shapeProblems(file: string, page: string, read: (path: string) => string | null): string[] {
   const problems: string[] = [];
+  problems.push(...expectProblems(file, page));
   const headings = headingsOf(page);
-  const number = file.match(/(\d\d)-[^/]*\.md$/)?.[1];
-  if (!number || !(headings[0] ?? "").startsWith(`# ${number} `)) problems.push(`${file}: the first heading must be "# ${number ?? "NN"} <what you can do after it>"`);
+  if (!(headings[0] ?? "").startsWith("# ")) problems.push(`${file}: the first heading must be "# <what you can do after it>"`);
   const shaped = headings.filter((line) => SHAPE.includes(line));
   if (shaped.join("|") !== SHAPE.join("|")) problems.push(`${file}: the "## " headings must be, in order: ${SHAPE.map((h) => h.slice(3)).join(", ")}`);
   if (!mermaidBlocks(sectionOf(page, "## How it works")).some((block) => block.trim().startsWith("sequenceDiagram"))) {
@@ -90,7 +101,7 @@ export function shapeProblems(file: string, page: string, read: (path: string) =
 export function readmeProblems(readme: string, pages: Array<{ file: string; page: string }>): string[] {
   const problems: string[] = [];
   for (const { file, page } of pages) {
-    const title = (headingsOf(page)[0] ?? "").replace(/^# \d\d /, "");
+    const title = (headingsOf(page)[0] ?? "").replace(/^# /, "");
     const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const links = [...readme.matchAll(new RegExp(`\\[([^\\]]+)\\]\\(\\./${escaped}\\)`, "g"))];
     if (links.length !== 1) problems.push(`README.md: links ${file} ${links.length} times; link it once in the lesson table`);
@@ -117,7 +128,7 @@ function renderProblems(file: string, page: string): string[] {
 }
 
 export function lessonFiles(): string[] {
-  return readdirSync(LESSONS).filter((name) => /^\d\d-.*\.md$/.test(name)).sort().map((name) => `${LESSONS}/${name}`);
+  return readdirSync(LESSONS).filter((name) => name.endsWith(".md")).sort().map((name) => `${LESSONS}/${name}`);
 }
 
 const readIfThere = (path: string) => (existsSync(path) ? readFileSync(path, "utf8") : null);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { breakItProblems, hasFailurePath, readmeProblems, shapeProblems } from "./lessons";
+import { breakItProblems, expectProblems, hasFailurePath, readmeProblems, shapeProblems } from "./lessons";
 
 const files: Record<string, string> = {
   "src/server/env.ts": "export function setting() {}",
@@ -9,7 +9,7 @@ const files: Record<string, string> = {
 };
 const read = (path: string) => files[path] ?? null;
 
-const page = `# 00 Start the stack
+const page = `# Start the stack
 
 ## Why
 Text.
@@ -39,12 +39,17 @@ Text.
 `;
 
 test("a page with every part in order has no problems", () => {
-  assert.deepEqual(shapeProblems("docs/learner/00-start.md", page, read), []);
+  assert.deepEqual(shapeProblems("docs/learner/start.md", page, read), []);
+});
+
+test("a bash block with no Expect line after it is caught", () => {
+  assert.deepEqual(expectProblems("x.md", "```bash\nnpm test\n```\n\nExpect: it passes."), []);
+  assert.match(expectProblems("x.md", "```bash\nnpm test\n```\n\nThen it passes.").join("\n"), /needs an "Expect:" line/);
 });
 
 test("a page with its headings out of order is caught", () => {
   const swapped = page.replace("## Goal", "## Tmp").replace("## Why", "## Goal").replace("## Tmp", "## Why");
-  assert.match(shapeProblems("docs/learner/00-start.md", swapped, read).join("\n"), /in order/);
+  assert.match(shapeProblems("docs/learner/start.md", swapped, read).join("\n"), /in order/);
 });
 
 test("a happy-path-only sequence diagram is caught", () => {
@@ -70,11 +75,11 @@ test("a break-it that says to find a line the file no longer holds is caught", (
 });
 
 test("a missing image is caught", () => {
-  assert.match(shapeProblems("docs/learner/00-start.md", page.replace("board.png", "gone.png"), read).join("\n"), /image .*gone\.png/);
+  assert.match(shapeProblems("docs/learner/start.md", page.replace("board.png", "gone.png"), read).join("\n"), /image .*gone\.png/);
 });
 
 test("the README links each lesson once, by its own title", () => {
-  const pages = [{ file: "docs/learner/00-start.md", page }];
-  assert.deepEqual(readmeProblems("| [Start the stack](./docs/learner/00-start.md) |", pages), []);
-  assert.match(readmeProblems("| [Setup](./docs/learner/00-start.md) |", pages).join("\n"), /its title is/);
+  const pages = [{ file: "docs/learner/start.md", page }];
+  assert.deepEqual(readmeProblems("| [Start the stack](./docs/learner/start.md) |", pages), []);
+  assert.match(readmeProblems("| [Setup](./docs/learner/start.md) |", pages).join("\n"), /its title is/);
 });

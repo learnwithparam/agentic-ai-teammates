@@ -1,10 +1,12 @@
-# 09 Publish the morning news
+# Publish the morning news
 
 ## Why
 
-A news teammate that writes its own summaries can invent a story. Or it can link to a page no source gave.
+A news teammate that writes its own summaries can invent a story. It can also link to a page that no source gave.
 Once that is published, people share it.
-So the model picks and writes, but plain code decides whether a card may go out.
+So the model picks and writes, but plain code decides whether a card may go out. A card is one story on the news page.
+
+For example, a card that links to a page no source gave is refused. Nobody sees it.
 
 ## Goal
 
@@ -12,7 +14,8 @@ You start an edition by hand and release it from the board. Then you read the ca
 
 ## Starting point
 
-The stack is running and you can sign in to Mission Control. The news sources are public, so there is no key to set. An `EXA_API_KEY` in `.env` adds Exa as a source.
+The stack is running and you can sign in to Mission Control. The news sources are public, so there is no key to set.
+An `EXA_API_KEY` in `.env` adds Exa as another source. Exa is a search service.
 
 ## How it works
 
@@ -20,20 +23,23 @@ The news teammate is a graph in `src/server/teammates/news/graph.ts`:
 
 | Node | What it does |
 | --- | --- |
-| `collect` | Reads RSS feeds, Hacker News and GDELT, plus Exa when it has a key. Drops stories published before. |
-| `dedupe` | Keeps the first of each story: the same link, or the same headline from two sources. Plain code. |
+| `collect` | Reads RSS feeds, Hacker News and GDELT, plus Exa with a key. Drops stories it published before. |
+| `dedupe` | Removes repeats: the same link, or the same headline from two sources. Plain code. |
 | `select` | A deeper-look model call picks up to five stories. |
-| `write` | Screens each article for instructions aimed at an AI. Then it writes one card: a headline, three points and why it matters. |
+| `write` | Checks each article for orders aimed at an AI. Then it writes one card: a headline, three points and why it matters. |
 | `check` | Plain checks on every card. |
 | `publish` | Hands the edition to the outbox through the gateway. |
 
 The gateway checks the edition again before it takes it, in `editionProblems`.
 Every card must link to a story a source gave that day. No card may repeat an earlier edition or this one.
 
-The teammate starts quiet. So its edition waits as a draft on the board until a person releases it.
-The dispatcher then writes the day's cards to the stack's storage, in `src/server/news-shelf.ts`. Mission Control serves them at `/news/`, to people of that company who may see the news teammate.
+The teammate starts quiet. Quiet means its messages wait as drafts until a person sends them.
+So its edition waits as a draft on the board until a person releases it.
 
-With `NEWS_TARGET=github` the dispatcher commits them to your fork of this repo instead. Its Pages workflow puts them live. The README says how to set that up.
+The dispatcher is the process that sends what the outbox holds.
+It then writes the day's cards to the stack's storage, in `src/server/news-shelf.ts`. Mission Control serves them at `/news/`, to people of that company who may see the news teammate.
+
+With `NEWS_TARGET=github`, the dispatcher commits the cards to your fork of this repo instead. GitHub Pages is a free way to publish a site from a repo. It then puts the cards live. The README says how to set that up.
 
 ```mermaid
 sequenceDiagram
@@ -62,8 +68,10 @@ docker exec teammates-platform-postgres-1 \
   psql -U teammates -d teammates -c "UPDATE timers SET fire_at = now() WHERE teammate = 'news' AND name = 'edition'"
 ```
 
-The scheduler fires it within a few seconds. Watch the news card move through Working to the outbox as a draft.
-Open it, read the cards, and send it.
+Expect: the scheduler fires the edition within a few seconds.
+
+Watch the news card move through Working to the outbox as a draft.
+Open it. Read the cards, then send them.
 
 Open http://localhost:8790/news/ and the cards are there.
 Swipe or use the arrow keys to move through the day.

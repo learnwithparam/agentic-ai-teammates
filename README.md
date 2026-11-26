@@ -11,13 +11,19 @@ You build three teammates:
 
 The teammates also hand work to each other. The invoice teammate may post a bill due within five days. Then it asks the payments teammate to run today. A person still approves every pay run.
 
-Each teammate has its own page in Mission Control. Work shows its cards, Schedule shows what it does next, and Memory shows what it keeps.
+Each teammate has its own page in Mission Control. Work shows its cards. Schedule shows what it does next. Memory shows what it keeps.
 
-The design follows the five parts of [Building always-on agents](https://claude.com/resources/articles/building-always-on-agents): inbox, timers, memory, permissions and outbox.
+The design follows the five parts of [Building always-on agents](https://claude.com/resources/articles/building-always-on-agents):
+
+- **Inbox** holds each event until the work is done.
+- **Timers** wake a teammate on a schedule or at a set time.
+- **Memory** keeps what a teammate must not forget.
+- **Permissions** decide what each action may do, and who may approve it.
+- **Outbox** holds each message until it is sent.
 
 ## What runs
 
-- **Postgres** stores the inbox, timers, outbox and runs.
+- **Postgres** stores the inbox and the timers. It also stores the outbox and the runs.
 - **Keycloak** signs people in. Each company is a Keycloak organization.
 - **OpenFGA** decides who may see a teammate or decide an approval.
 - **MinIO** stores files on your machine. In production you point the same code at R2 or S3.
@@ -26,24 +32,24 @@ Nothing here is a stand-in. Every model call is real, and every service is the o
 
 ## Lessons
 
-Every lesson runs on `main` with the stack up. You read the files and run the real flow. Then you remove one named guard, watch its test fail, and put it back.
+Every lesson runs on `main` with the stack up. You read the files and run the real flow. Then you remove one named guard. A guard is a line of code that refuses a bad action. Watch its test fail, then put the guard back.
 
-| Lesson | What you can do after it |
-| --- | --- |
-| 00 | [Start the stack](./docs/learner/00-start-the-stack.md) |
-| 01 | [Meet the apps your teammates work in](./docs/learner/01-meet-the-world.md) |
-| 02 | [Catch every event in a durable inbox](./docs/learner/02-catch-every-event.md) |
-| 03 | [Bound the agent loop](./docs/learner/03-bound-the-agent-loop.md) |
-| 04 | [Read an invoice with a graph you can trace](./docs/learner/04-read-an-invoice.md) |
-| 05 | [Check every invoice before it posts](./docs/learner/05-check-before-you-post.md) |
-| 06 | [Ask a person before a risky action](./docs/learner/06-ask-before-acting.md) |
-| 07 | [Route each call to the right model](./docs/learner/07-route-to-the-right-model.md) |
-| 08 | [Follow up on time and remember what people decided](./docs/learner/08-remember-and-follow-up.md) |
-| 09 | [Publish the morning news](./docs/learner/09-publish-the-morning-news.md) |
-| 10 | [Send safely, then score the teammate](./docs/learner/10-send-safely-and-score.md) |
-| 11 | [Deploy the teammates to a server](./docs/learner/11-deploy-for-real.md) |
-| 12 | [Build a payments teammate from one definition](./docs/learner/12-build-a-payments-teammate.md) |
-| 13 | [Talk to a teammate and hand it work](./docs/learner/13-talk-to-a-teammate.md) |
+| What you can do after it |
+| --- |
+| [Start the stack](./docs/learner/start-the-stack.md) |
+| [Meet the apps your teammates work in](./docs/learner/meet-the-world.md) |
+| [Catch every event in a durable inbox](./docs/learner/catch-every-event.md) |
+| [Bound the agent loop](./docs/learner/bound-the-agent-loop.md) |
+| [Read an invoice with a graph you can trace](./docs/learner/read-an-invoice.md) |
+| [Check every invoice before it posts](./docs/learner/check-before-you-post.md) |
+| [Ask a person before a risky action](./docs/learner/ask-before-acting.md) |
+| [Route each call to the right model](./docs/learner/route-to-the-right-model.md) |
+| [Follow up on time and remember what people decided](./docs/learner/remember-and-follow-up.md) |
+| [Publish the morning news](./docs/learner/publish-the-morning-news.md) |
+| [Send safely, then score the teammate](./docs/learner/send-safely-and-score.md) |
+| [Deploy the teammates to a server](./docs/learner/deploy-for-real.md) |
+| [Build a payments teammate from one definition](./docs/learner/build-a-payments-teammate.md) |
+| [Talk to a teammate and hand it work](./docs/learner/talk-to-a-teammate.md) |
 
 ## Start
 
@@ -131,9 +137,15 @@ After changing `data/invoices/cases.ts`, write the files again with `npm run inv
 npm run demo:reset
 ```
 
-It empties every teammate's work: runs, cards, timers, chats, memory, mail, files and bills. Then it puts back the seed data and sends six invoices. Two post and are due soon, so the invoice teammate asks the payments teammate to pay them. One waits for you, one has new bank details, and one tries to give the teammate orders.
+It empties every teammate's work:
 
-Sign-ins, members and mailboxes stay, so nothing needs a restart.
+- runs and cards
+- timers and chats
+- memory
+- mail and files
+- bills Then it puts back the seed data and sends six invoices. Two post and are due soon, so the invoice teammate asks the payments teammate to pay them. One waits for you. One has new bank details. One tries to give the teammate orders.
+
+Sign-ins and members stay. So do the mailboxes. Nothing needs a restart.
 
 It only runs on a machine whose `.env` has `DEMO_RESET=yes`. It refuses while the teammates read Gmail or Google Drive.
 
@@ -141,7 +153,7 @@ It only runs on a machine whose `.env` has `DEMO_RESET=yes`. It refuses while th
 
 The news teammate starts at seven on working mornings. It collects the last two days of stories and drops the ones it published before. Then it picks up to five, reads each article and writes one card per story. Each card links only to a story a source gave that day. The gateway refuses any other link.
 
-The sources are public RSS feeds, Hacker News and GDELT, so they need no key. Set `EXA_API_KEY` to add Exa as a source.
+The sources are public. They are RSS feeds, Hacker News and GDELT. None needs a key. Set `EXA_API_KEY` to add Exa as a source.
 
 Each edition goes on Mission Control's news page, at http://localhost:8790/news/. It needs the same sign-in as the board, and each person sees their own company's news.
 
@@ -187,7 +199,7 @@ npm run teammate:attack -- invoice
 npm run teammate:attack -- all
 ```
 
-This sends real attacks at a teammate, through the running gateway, with real model calls. Every teammate gets the shared ones:
+This sends real attacks at a teammate through the running gateway. It uses real model calls. Every teammate gets the shared ones:
 
 - A chat message that orders a write.
 - A tool from outside its list.

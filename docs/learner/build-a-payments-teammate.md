@@ -1,22 +1,27 @@
-# 12 Build a payments teammate from one definition
+# Build a payments teammate from one definition
 
 ## Why
 
-The article's teammates share one core: an inbox, timers, memory, permissions and an outbox. A new teammate should reuse all five and add only its job. If each new job means changes across the core, every teammate can break the others.
+The teammates share one core. It has the five parts from the article, which is Building always-on agents.
+A new teammate should reuse all five and add only its own job. If each new job means changes across the core, every teammate can break the others.
 
-Paying bills is the riskiest job yet. Money leaves the company. A fraudster who changes a vendor's bank details only has to wait for the next pay run.
+Paying bills is the riskiest job yet. Money leaves the company.
+For example, a fraudster changes a vendor's bank details. Then the next pay run sends the money to the new account.
 
 ## Goal
 
-You read how the payments teammate is defined in one folder. You run a pay run, approve it, and see two bills paid in QuirkBooks. The bill whose bank changed is held back.
+You read how the payments teammate is defined in one folder. You run a pay run and approve it. Then you see two bills paid in QuirkBooks. The bill whose bank changed is held back.
 
 ## Starting point
 
-The stack is running and you can sign in to Mission Control as Ada. QuirkBooks has three open bills to pay. Harbor Lane's rent and Copperleaf's catering fall due this week, and Pixelforge's licence is overdue. Copperleaf's bank details changed after its bill posted.
+The stack is running and you can sign in to Mission Control as Ada. QuirkBooks has three open bills to pay.
+Harbor Lane's rent and Copperleaf's catering fall due this week, and Pixelforge's licence is overdue.
+Copperleaf's bank details changed after its bill posted.
 
 ## How it works
 
-A teammate is one folder under `src/server/teammates/` and one name in `registry.ts`. The definition in `payments/teammate.ts` says everything the core needs:
+A teammate is one folder under `src/server/teammates/` and one name in `registry.ts`. The registry is the list of teammates.
+The definition in `payments/teammate.ts` says everything the core needs:
 
 | Field | For payments |
 | --- | --- |
@@ -28,9 +33,10 @@ A teammate is one folder under `src/server/teammates/` and one name in `registry
 
 The gateway lets the teammate call only those tools. The scheduler gives it only those timers. `docs/teammates.md` lists every field.
 
-The pay run is a graph in `payments/graph.ts`. It calls no model. The books know which bills are due and which bank each was posted with. They also know the total. So plain code decides.
+The pay run is a graph in `payments/graph.ts`. It calls no model.
+The books know which bills are due and which bank each was posted with. They also know the total. So plain code decides.
 
-There are three walls, each from facts the model never gives:
+There are three walls. Each one checks facts that the model never supplies:
 
 1. The graph checks each bill with `payProblems` and holds back the ones that fail.
 2. The gateway's guard on `books.pay_bill` reads every bill again. It refuses a run whose total is not the books' own sum. That total is the amount on the approval card. So a person's approval limit is checked against the true sum.
@@ -58,11 +64,16 @@ sequenceDiagram
 
 ### Two teammates working together
 
-A bill can fall due before the next pay run. So the invoice teammate checks each bill it posts. If one falls due within five days, it asks the payments teammate to run today. It calls `team.ask_teammate`, and the ask lands in Payments' inbox as a `teammate.request` event.
+A bill can fall due before the next pay run. So the invoice teammate checks each bill it posts.
+If a bill falls due within five days, it asks the payments teammate to run today.
+It calls `team.ask_teammate`. The ask lands in Payments' inbox as a `teammate.request` event.
 
-Two lists must agree before an ask goes through. The invoice teammate lists `team.ask_teammate` in its tools. The payments teammate names `invoice` in `takesAsksFrom`. If either list is missing, the gateway refuses the ask.
+Two lists must match before an ask goes through.
+The invoice teammate must list `team.ask_teammate` in its tools. The payments teammate must name `invoice` in `takesAsksFrom`.
+If either list is missing, the gateway refuses the ask.
 
-The ask moves no money. Payments starts the day's pay run, checks every bill again, and a person still approves the card. Paying records the payment in QuirkBooks. No bank money moves in this workshop.
+The ask moves no money. Payments starts the day's pay run and checks every bill again. A person still approves the card.
+Paying records the payment in QuirkBooks. No bank money moves in this workshop.
 
 ![The pay run card after the invoice teammate's ask](../images/mc-pay-run.png)
 
@@ -75,11 +86,14 @@ docker exec teammates-platform-postgres-1 \
   psql -U teammates -d teammates -c "UPDATE timers SET fire_at = now() WHERE teammate = 'payments' AND name = 'pay-run'"
 ```
 
-The payments card on the board moves to Waiting. Open the approval: it lists every open bill due within five days.
+Expect: the payments card on the board moves to Waiting.
 
-On a fresh stack that is two bills, 2,088.00 EUR. Bills you posted in earlier lessons join the run if they fall due in that window. Approve it as Ada.
+Open the approval. It lists every open bill due within five days.
 
-Open QuirkBooks at http://localhost:8803 and look at the bills. Harbor Lane's rent and the Pixelforge licence are paid. Copperleaf is still open. The audit log has one `bill.paid` line per bill, with the reason Ada approved.
+On a fresh stack, the run has two bills. They total 2,088.00 EUR. Bills you posted in earlier lessons join the run if they fall due in that window. Approve it as Ada.
+
+Open QuirkBooks at http://localhost:8803 and look at the bills. Harbor Lane's rent and the Pixelforge licence are paid. Copperleaf is still open.
+The audit log has one `bill.paid` line per bill, with the reason Ada approved.
 
 Now attack it:
 
@@ -88,7 +102,7 @@ npm run teammate:attack -- payments
 npm run teammate:eval -- payments
 ```
 
-Both pass. The eval never pays: every run it sends is one the gateway must refuse.
+Expect: both commands pass. The eval never pays. Every run it sends is one the gateway must refuse.
 
 To start a teammate of your own, write it from the template:
 
@@ -97,11 +111,13 @@ npm run teammate:new -- late-fees
 npm run check
 ```
 
-The check passes before you change anything. The skill in `.claude/skills/new-teammate` walks Claude Code through the rest.
+Expect: the check passes before you change anything.
+
+The skill in `.claude/skills/new-teammate` walks Claude Code through the rest. Claude Code is an AI coding assistant that runs in your terminal.
 
 ## Break it
 
-The guard's sum check keeps the card honest. Without it, a small number on the card could slip a large run past a person's limit.
+The guard's sum check keeps the card honest. Without it, a small number on the card could let a large run slip past a person's limit.
 
 1. Open `src/server/tools/books.ts` and find `if (sum !== args.total) return { deny` in the guard of `books.pay_bill`.
 2. Delete that line.
@@ -113,7 +129,7 @@ The guard's sum check keeps the card honest. Without it, a small number on the c
 
 4. Put it back. It passes.
 
-The hand-off has its own guard: the two lists must agree.
+The hand-off has its own guard: the two lists must match.
 
 1. Open `src/server/teammates/invoice/teammate.ts` and find `"team.ask_teammate",` in its tools.
 2. Delete that line.
