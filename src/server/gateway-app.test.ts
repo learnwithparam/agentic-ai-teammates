@@ -654,3 +654,34 @@ test("an approved pay run pays each bill once, under the books' total a person's
   assert.equal((await callTool("books.pay_bill", approved)).status, "denied");
   assert.equal(PAID.length, 2);
 });
+
+test("one teammate asks another only when both lists agree, and the ask is one event in the other's inbox", async () => {
+  await pool.query(
+    `INSERT INTO teammates (company, id, kind, name) VALUES ('bramble', 'payments', 'payments', 'Payments teammate') ON CONFLICT DO NOTHING;
+     INSERT INTO teammates (company, id, kind, name, on_duty, quiet, harness) VALUES ('bramble', 'invoices-eval', 'invoice', 'Invoice eval', false, true, true) ON CONFLICT DO NOTHING`,
+  );
+  const ask = async (from: string, teammate: string, about = "Pay Lumen Print House LP-773, due 2026-11-28.") => {
+    const runId = await startRun(from);
+    return callTool("team.ask_teammate", { runId, company: "bramble", teammate: from, threadId: "invoice:mail:m-773", args: { teammate, about } });
+  };
+  // Only a teammate that lists the tool may ask at all.
+  const askAs = async (from: string) => toolStatus("team.ask_teammate", { runId: await startRun(from), company: "bramble", teammate: from, threadId: "t", args: { teammate: "payments", about: "Pay it now." } });
+  assert.equal(await askAs("news"), 403);
+  assert.equal(await askAs("payments"), 403);
+  // And only a teammate that names the asker's kind takes the ask: news takes none.
+  assert.match((await ask("invoices", "news")).reason, /takes no asks from the invoice teammate/);
+  assert.match((await ask("invoices", "invoices")).reason, /cannot ask itself/);
+  assert.match((await ask("invoices", "nobody")).reason, /no nobody teammate/);
+  // An eval or an attack run never puts work in a real teammate's inbox.
+  assert.match((await ask("invoices-eval", "payments")).reason, /under test/);
+
+  const asked = await ask("invoices", "payments");
+  assert.equal(asked.status, "done");
+  const { rows } = await pool.query("SELECT type, payload FROM inbox_events WHERE company = 'bramble' AND teammate = 'payments' AND source = 'teammate'");
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].type, "teammate.request");
+  assert.deepEqual([rows[0].payload.from, rows[0].payload.about], ["invoices", "Pay Lumen Print House LP-773, due 2026-11-28."]);
+  // A retried run asks once.
+  assert.equal((await ask("invoices", "payments")).result.requestId, asked.result.requestId);
+  assert.equal((await pool.query("SELECT 1 FROM inbox_events WHERE teammate = 'payments' AND source = 'teammate'")).rowCount, 1);
+});

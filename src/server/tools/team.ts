@@ -12,6 +12,8 @@ import { Day, type InvoiceSource } from "./shapes";
 import { prompt } from "../prompts";
 
 const HAND_OVER_RULES = prompt(import.meta.url, "hand-over");
+// A teammate id, such as payments.
+const KIND_NAME = z.string().regex(/^[a-z][a-z-]{1,30}$/);
 
 const Document = z.object({
   kind: z.enum(["mail", "drive"]),
@@ -150,6 +152,46 @@ export const teamTools = {
         payload: { requestId, person: asked.person, from: asked.from, ask: safeLine(args.ask, 300), source, authority: asked.authority },
       });
       return { status: "done", result: { requestId, document: source.subject ?? source.id } };
+    },
+  }),
+  // One teammate asks another for work, such as Invoice asking Payments to pay a bill it just
+  // posted. Only plain code calls it, never a model. Two lists must agree: the asker lists this
+  // tool, and the teammate asked names the asker's kind in takesAsksFrom. The ask is one inbox
+  // event, and the teammate asked still runs its own checks and asks a person before it pays.
+  "team.ask_teammate": defineTool({
+    description: "Ask another teammate in the company for work, such as paying a bill that was just posted.",
+    args: z.object({ teammate: KIND_NAME, about: z.string().min(1).max(200) }),
+    decision: "allow",
+    label: "Ask another teammate",
+    readOnly: false,
+    guard: async (ctx, args) => {
+      if (args.teammate === ctx.scope.teammate) return { deny: "A teammate cannot ask itself." };
+      const { rows } = await ctx.deps.pool.query<{ id: string; kind: string; harness: boolean }>(
+        "SELECT id, kind, harness FROM teammates WHERE company = $1 AND id = ANY($2)",
+        [ctx.scope.company, [ctx.scope.teammate, args.teammate]],
+      );
+      const asker = rows.find((row) => row.id === ctx.scope.teammate);
+      const asked = rows.find((row) => row.id === args.teammate);
+      // A teammate under test never reaches a real one, so an eval or an attack leaves real work alone.
+      if (!asker || asker.harness) return { deny: "A teammate under test never asks a real teammate for work." };
+      if (!asked || asked.harness) return { deny: `This company has no ${args.teammate} teammate.` };
+      // The registry imports every teammate, and they import the tools, so it loads here, when a guard runs.
+      const { teammateKind } = await import("../teammates/registry");
+      const takes = teammateKind(asked.kind)?.takesAsksFrom ?? [];
+      if (!takes.includes(asker.kind)) return { deny: `The ${args.teammate} teammate takes no asks from the ${asker.kind} teammate.` };
+      return {};
+    },
+    card: (args) => ({ title: `A request to the ${args.teammate} teammate`, brief: safeLine(args.about, 200), canAllowAlways: true }),
+    run: async (ctx, args) => {
+      const about = safeLine(args.about, 200);
+      const { company, teammate } = ctx.scope;
+      // The same ask from the same teammate is one request, however often the run retries.
+      const requestId = stableUuid(`${company}/${teammate}/${args.teammate}/${about}`);
+      await new Inbox(ctx.deps.pool).receive({
+        company, teammate: args.teammate, source: "teammate", sourceId: requestId, type: "teammate.request",
+        payload: { requestId, from: teammate, about, runId: ctx.scope.runId },
+      });
+      return { status: "done", result: { requestId, teammate: args.teammate } };
     },
   }),
   "team.remind": defineTool({

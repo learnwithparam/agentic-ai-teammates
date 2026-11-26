@@ -5,23 +5,29 @@ import { type BookFacts, CARD_WAITS, checkInvoice, Invoice, PO_TOLERANCE, type P
 import { GatewayError } from "../../gateway-client";
 import { INSTRUCTIONS, notePath, vendorTopic } from "../../memory";
 import { modelSchema } from "../../model-schema";
+import { daysAfter } from "../../payments";
 import { COMPANIES } from "../../people";
 import type { Run, StopReason } from "../../run";
 import type { InvoiceSource } from "../../tools";
 import { prompt } from "../../prompts";
+import { safeLine } from "../../team-mail";
+import { PAY_WINDOW_DAYS } from "../payments/graph";
+import { companyDay } from "../timed";
 
 // The invoice teammate's work on one invoice, as a LangGraph graph. Fixed steps are plain nodes;
 // only "investigate" is an open-ended loop, and it may only read. Each invoice is its own thread,
 // checkpointed in Postgres, so an approval days later resumes exactly where it stopped.
 //
-//   fetch -> screen -> extract -> lookup -> checks -> post -> notify
+//   fetch -> screen -> extract -> lookup -> checks -> post -> ask_payments -> notify
 //   checks failed: recall -> investigate -> brief -> post -> wait
-//   a person decided: post_approved -> notify
+//   a person decided: post_approved -> ask_payments -> notify
 
 export type Result = { outcome: StopReason; note: string };
 export type Decision = { status: "approved" | "denied"; approvalId: string };
 // What memory holds for this invoice: a person's instructions, and earlier decisions on this vendor.
 type Recalled = { instructions: string | null; pastDecisions: string | null };
+// The teammate the invoice teammate asks to pay a bill, by its id in every company.
+const PAYMENTS = "payments";
 
 const State = Annotation.Root({
   source: Annotation<InvoiceSource>,
@@ -253,6 +259,22 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
     return postResult(state, result);
   }
 
+  // A bill that falls due before tomorrow's pay run could pay late, so the payments teammate is
+  // asked to run today. The ask names the bill as QuirkBooks has the vendor. Payments still
+  // checks the bill and asks a person before it pays, so the ask cannot move money by itself.
+  async function askPayments(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
+    const { invoice, facts } = state;
+    if (!state.posted || !invoice?.dueDate) return {};
+    const run = runOf(config);
+    const today = companyDay(new Date(), COMPANIES[run.ref.company].timezone);
+    if (invoice.dueDate > daysAfter(today, PAY_WINDOW_DAYS)) return {};
+    const vendor = facts?.vendor?.name ?? invoice.vendorName;
+    const about = `Pay ${safeLine(vendor, 60)} ${safeLine(invoice.invoiceNumber, 40)}, due ${invoice.dueDate}.`;
+    const asked = await run.tool(threadOf(config), "team.ask_teammate", { teammate: PAYMENTS, about });
+    if (asked.status === "denied") await run.note("note", "The payments teammate was not asked", { reason: asked.reason });
+    return {};
+  }
+
   // Tells the vendor, through the outbox, what happened to an invoice that came by email.
   async function notify(state: State, config: LangGraphRunnableConfig): Promise<Partial<State>> {
     const run = runOf(config);
@@ -280,6 +302,7 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
     .addNode("post", post)
     .addNode("wait", wait)
     .addNode("post_approved", postApproved)
+    .addNode("ask_payments", askPayments)
     .addNode("notify", notify)
     .addEdge(START, "fetch")
     .addConditionalEdges("fetch", (state) => (state.result ? END : "screen"), ["screen", END])
@@ -290,9 +313,10 @@ export function invoiceGraph(checkpointer: BaseCheckpointSaver, runs: RunLookup)
     .addEdge("recall", "investigate")
     .addEdge("investigate", "write_brief")
     .addEdge("write_brief", "post")
-    .addConditionalEdges("post", (state) => (state.approvalId && !state.result ? "wait" : "notify"), ["wait", "notify"])
+    .addConditionalEdges("post", (state) => (state.approvalId && !state.result ? "wait" : "ask_payments"), ["wait", "ask_payments"])
     .addEdge("wait", "post_approved")
-    .addEdge("post_approved", "notify")
+    .addEdge("post_approved", "ask_payments")
+    .addEdge("ask_payments", "notify")
     .addEdge("notify", END)
     .compile({ checkpointer });
 }

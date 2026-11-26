@@ -38,6 +38,7 @@ The Payments teammate in `src/server/teammates/payments` was built this way. Rea
 | `tools` | The only tools the gateway lets this teammate call. Every other tool answers 403. |
 | `schedules` | Timers by name and cron, in the company's time zone. |
 | `listens` | The webhook sources that wake it: `mail`, `drive`, or none. |
+| `takesAsksFrom` | The kinds of teammate that may ask it for work with `team.ask_teammate`. The payments teammate takes asks from `invoice`. None when left out. |
 | `defaults` | What a new teammate row starts with. Today that is `dailyBudgetUsd`. |
 | `capabilities` | The parts the core supplies, switched on here. See the next table. |
 | `evaluate` | The eval script, from the repo root. `npm run teammate:eval -- <kind>` runs it. |

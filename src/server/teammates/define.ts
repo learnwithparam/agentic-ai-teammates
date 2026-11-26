@@ -49,6 +49,8 @@ export type TeammateDefinition = {
   listens: HookSource[];
   defaults: { dailyBudgetUsd: number };
   capabilities: Capabilities;
+  // The kinds of teammate that may ask this one for work with team.ask_teammate. None when left out.
+  takesAsksFrom?: string[];
   // The script that scores this teammate with real model calls, from the repo root. It is the
   // evidence for turning Quiet off: npm run teammate:eval -- <kind> runs it.
   evaluate: string;

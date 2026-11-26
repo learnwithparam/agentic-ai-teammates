@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -10,7 +11,7 @@ import { TOOLS } from "../tools";
 import { workInbox } from "../worker-loop";
 import { sharedAttacks } from "./attacks";
 import { defineTeammate } from "./define";
-import { ensureTeammates } from "./ensure";
+import { ensureHarnessTeammate, ensureTeammates } from "./ensure";
 import { TEAMMATES } from "./registry";
 
 let pool: Pool;
@@ -73,4 +74,37 @@ test("a teammate whose kind has no code hands its events to a person instead of 
   assert.deepEqual(rows.map((row) => row.status), ["done"]);
   const run = await pool.query("SELECT summary FROM runs WHERE id = $1", [settled?.runId]);
   assert.match(run.rows[0].summary, /no teammate code for the kind "retired-kind"/);
+});
+
+// An ask needs two lists to agree: the asker lists team.ask_teammate, and the teammate asked
+// names the asker's kind. One without the other is a hand-off that is refused on the day it is needed.
+test("every kind a teammate takes asks from exists and may ask, and every teammate that asks has someone to ask", () => {
+  const takers = TEAMMATES.flatMap((teammate) => (teammate.takesAsksFrom ?? []).map((kind) => ({ taker: teammate.kind, kind })));
+  for (const { taker, kind } of takers) {
+    const asker = TEAMMATES.find((teammate) => teammate.kind === kind);
+    assert.ok(asker, `${taker} takes asks from ${kind}, which is not a teammate`);
+    assert.ok(asker.tools.includes("team.ask_teammate"), `${taker} takes asks from ${kind}, which does not list team.ask_teammate`);
+  }
+  for (const teammate of TEAMMATES.filter((each) => each.tools.includes("team.ask_teammate"))) {
+    assert.ok(takers.some((each) => each.kind === teammate.kind), `${teammate.kind} lists team.ask_teammate, but no teammate takes its asks`);
+  }
+});
+
+test("a harness teammate starts each script run with no card of its own still waiting", async () => {
+  await ensureHarnessTeammate(pool, { company: "bramble", id: "invoice-attack", kind: "invoice", name: "Invoice attack" });
+  const card = (id: string, teammate: string) =>
+    pool.query(
+      `INSERT INTO approvals (id, company, teammate, run_id, thread_id, tool, args, payload_hash, title, brief)
+       VALUES ($1, 'bramble', $2, $3, 't', 'books.post_bill', '{}', 'h', 'Post a bill', 'Brief')`,
+      [id, teammate, randomUUID()],
+    );
+  const own = randomUUID();
+  const real = randomUUID();
+  await card(own, "invoice-attack");
+  await card(real, "invoices");
+  await ensureHarnessTeammate(pool, { company: "bramble", id: "invoice-attack", kind: "invoice", name: "Invoice attack" });
+  const { rows } = await pool.query("SELECT id, status FROM approvals WHERE id = ANY($1)", [[own, real]]);
+  const status = Object.fromEntries(rows.map((row) => [row.id, row.status]));
+  assert.equal(status[own], "denied");
+  assert.equal(status[real], "pending", "a real teammate's card is never closed by a script");
 });

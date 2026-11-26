@@ -20,6 +20,8 @@ export const invoice = defineTeammate({
     "books.purchase_order",
     "books.vendor_bills",
     "books.post_bill",
+    // After it posts a bill that falls due soon, it asks the payments teammate to pay it.
+    "team.ask_teammate",
     "memory.read",
     "memory.reported",
     "memory.record_decision",

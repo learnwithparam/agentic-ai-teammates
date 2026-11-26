@@ -12,9 +12,11 @@ import { type Decision, FRESH_STATE, paymentsGraph, type Result } from "./graph"
 export const PAY_RUN_TIMER = "pay-run";
 
 const Fired = z.object({ name: z.string(), firedFor: z.iso.datetime() });
+const Asked = z.object({ from: z.string(), about: z.string() });
 const DecidedPayload = z.object({ approvalId: z.string(), threadId: z.string(), status: z.enum(["approved", "denied"]) });
 
-type Work = { threadId: string; start: { day: string } } | { threadId: string; resume: Decision };
+// A start names the teammate's ask when one started it, so the run says who it is for.
+type Work = { threadId: string; start: { day: string; asked: string | null } } | { threadId: string; resume: Decision };
 
 export function payRunThread(day: string): string {
   return `payments:${day}`;
@@ -58,8 +60,11 @@ export function paymentsTeammate(checkpointer: BaseCheckpointSaver) {
       // A day that finished, or waits for a person, is never started again, so it pays once.
       if (state.values?.day && (state.next.length === 0 || state.next.includes("wait"))) {
         await run.note("note", `The pay run for ${item.start.day} already ran, so it does not run again`, { threadId: item.threadId });
+        // An ask on a day whose run already ran is answered by the next working day's run, which includes overdue bills.
+        if (item.start.asked) return { outcome: "nothing_to_send", note: `${item.start.asked} The pay run for ${item.start.day} already ran, so the next one includes it.` };
         return null;
       }
+      if (item.start.asked) await run.note("note", item.start.asked, { threadId: item.threadId });
       if (state.values?.day) await graph.invoke(null, config);
       else await graph.invoke({ day: item.start.day, ...FRESH_STATE }, config);
     } else if (state.next.length > 0 && !state.next.includes("wait")) {
@@ -90,7 +95,14 @@ function plan(run: Run, batch: InboxEvent[]): Work[] {
       // Two firings for one day in a batch are one pay run.
       if (days.has(day)) continue;
       days.add(day);
-      work.push({ threadId: payRunThread(day), start: { day } });
+      work.push({ threadId: payRunThread(day), start: { day, asked: null } });
+    } else if (event.type === "teammate.request" && event.source === "teammate") {
+      // Another teammate asked for a bill to be paid: today's pay run starts now, not at nine.
+      const asked = Asked.parse(event.payload);
+      const day = companyDay(event.receivedAt, timezone);
+      if (days.has(day)) continue;
+      days.add(day);
+      work.push({ threadId: payRunThread(day), start: { day, asked: `The ${asked.from} teammate asked: ${asked.about}` } });
     } else if (event.type === "approval.decided") {
       const decided = DecidedPayload.parse(event.payload);
       work.push({ threadId: decided.threadId, resume: { status: decided.status, approvalId: decided.approvalId } });

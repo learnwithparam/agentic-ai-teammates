@@ -52,3 +52,25 @@ test("a second pay-run firing on the same day reads no bills and writes why it s
   assert.equal(tools.length, first, "the second firing calls no tool");
   assert.ok(titles.includes("The pay run for 2026-11-26 already ran, so it does not run again"), titles.join(" | "));
 });
+
+const askedFor = (receivedAt: string): InboxEvent => ({
+  id: randomUUID(), company: "bramble", teammate: "payments", source: "teammate", sourceId: randomUUID(),
+  type: "teammate.request", payload: { from: "invoices", about: "Pay Lumen Print House LP-773, due 2026-11-30.", runId: randomUUID() },
+  deliveries: 1, attempts: 0, receivedAt: new Date(receivedAt),
+});
+
+test("the invoice teammate's ask starts that day's pay run, and on a day that already ran it says the next run pays", async () => {
+  const work = paymentsTeammate(new MemorySaver());
+  const start = async (event: InboxEvent) => {
+    const run = await Run.start(pool, gateway, { runId: randomUUID(), company: "bramble", teammate: "payments" }, RUN_CAPS);
+    await work(run, [event]);
+    const { rows } = await pool.query<{ title: string }>("SELECT title FROM run_steps WHERE run_id = $1 ORDER BY id", [run.ref.runId]);
+    return rows.map((row) => row.title).join(" | ");
+  };
+  const before = tools.length;
+  const first = await start(askedFor("2026-12-02T14:00:00.000Z"));
+  assert.ok(tools.slice(before).includes("books.due_bills"), "the ask reads the due bills now, not at nine");
+  assert.match(first, /The invoices teammate asked: Pay Lumen Print House LP-773/);
+  const again = await start(askedFor("2026-12-02T15:00:00.000Z"));
+  assert.match(again, /already ran/);
+});

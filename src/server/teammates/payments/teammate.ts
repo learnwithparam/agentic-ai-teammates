@@ -16,6 +16,8 @@ export const payments = defineTeammate({
   defaults: { dailyBudgetUsd: 0.25 },
   // It answers questions about the bills that are due, and never sets work for itself.
   capabilities: { chat: { mode: "read", reads: ["books.due_bills"] }, followUps: false, digest: true, tidy: false },
+  // The invoice teammate asks it to pay a bill it just posted, so the bill need not wait a day.
+  takesAsksFrom: ["invoice"],
   evaluate: "data/payments/eval.ts",
   attacks,
   work: paymentsTeammate,

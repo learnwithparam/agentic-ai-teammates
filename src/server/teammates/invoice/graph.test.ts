@@ -11,7 +11,7 @@ test("the invoice graph builds, with every step the plan names", async () => {
     throw new Error("Building the graph runs no step.");
   });
   const steps = Object.keys((await graph.getGraphAsync()).nodes).filter((name) => !name.startsWith("__"));
-  assert.deepEqual(steps.sort(), ["checks", "extract", "fetch", "investigate", "lookup", "notify", "post", "post_approved", "recall", "screen", "wait", "write_brief"]);
+  assert.deepEqual(steps.sort(), ["ask_payments", "checks", "extract", "fetch", "investigate", "lookup", "notify", "post", "post_approved", "recall", "screen", "wait", "write_brief"]);
 });
 
 // A second mail with a bill whose card already waits is not work for a person: they have the card.

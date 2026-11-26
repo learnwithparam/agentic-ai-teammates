@@ -28,4 +28,11 @@ export async function ensureHarnessTeammate(pool: Pool, mate: { company: string;
      ON CONFLICT (company, id) DO UPDATE SET paused = false, on_duty = false, quiet = true, harness = true`,
     [mate.company, mate.id, mate.kind, mate.name],
   );
+  // Each script run starts clean. A card an earlier run left waiting blocks a new card for
+  // that bill, so the case would score the earlier run.
+  await pool.query(
+    `UPDATE approvals SET status = 'denied', decided_by = 'harness', decided_by_name = 'Harness', decision_note = 'Closed when the next script run started.', decided_at = now()
+     WHERE company = $1 AND teammate = $2 AND status = 'pending'`,
+    [mate.company, mate.id],
+  );
 }
