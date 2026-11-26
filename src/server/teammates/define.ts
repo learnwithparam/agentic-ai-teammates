@@ -8,13 +8,14 @@ import type { Teammate } from "../worker-loop";
 // The scheduler gives it its schedules. The hooks wake it only for the sources it listens to.
 // Startup gives each company one.
 
-export type Schedule = { name: string; cron: string };
+// label is what a person reads on the teammate's Schedule tab, such as "Pay run".
+export type Schedule = { name: string; cron: string; label: string };
 
 // The day's summary, at six on a working evening.
-export const DIGEST: Schedule = { name: "digest", cron: "0 18 * * 1-5" };
+export const DIGEST: Schedule = { name: "digest", cron: "0 18 * * 1-5", label: "The day's summary" };
 
 // The weekly tidy of its notes, early on a Monday, before the week's work.
-export const TIDY: Schedule = { name: "tidy", cron: "0 7 * * 1" };
+export const TIDY: Schedule = { name: "tidy", cron: "0 7 * * 1", label: "Tidy its notes" };
 
 // The webhook sources a teammate can wake on: new mail in the accounts mailbox, a new file in the drive.
 export type HookSource = "mail" | "drive";

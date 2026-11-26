@@ -6,7 +6,7 @@ import { Approvals, REMIND_AFTER_HOURS, reminderName } from "./approvals";
 import { ensureStandingSchedules } from "./scheduler-loop";
 import { comingDays, companyDay, companyTime } from "./teammates/timed";
 import { testDatabase } from "./test-database";
-import { cancelTimer, fireDue, nextFire, setTimer } from "./timers";
+import { cancelTimer, cronWords, fireDue, nextFire, setTimer } from "./timers";
 import { TEAMMATES } from "./teammates/registry";
 
 // Timers against a real Postgres. Each firing must reach the inbox exactly once, and a timer
@@ -128,4 +128,11 @@ test("the coming days are named on the company's clock, so Friday after a Thursd
   assert.equal(days[6], "Thursday, 3 December 2026 (2026-12-03)");
   // Half past midnight on the night the clocks go back: the next day is still the next day.
   assert.equal(comingDays(new Date("2026-10-24T22:30:00Z"), "Europe/Amsterdam")[0], "Monday, 26 October 2026 (2026-10-26)");
+});
+
+test("a schedule is said in words when it can be, and shown as it is when it cannot", () => {
+  assert.equal(cronWords("0 9 * * 1-5"), "Weekdays at 09:00");
+  assert.equal(cronWords("30 7 * * 1"), "Mondays at 07:30");
+  assert.equal(cronWords("0 18 * * *"), "Every day at 18:00");
+  for (const odd of ["*/15 * * * *", "0 9 1 * *", "0 9 * * 1,3", "0 9 * * 1-5 2027"]) assert.equal(cronWords(odd), odd);
 });

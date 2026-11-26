@@ -1,4 +1,4 @@
-import { GetObjectCommand, NoSuchKey, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, NoSuchKey, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { ensureBucket } from "./s3";
 
 // Memory: the third primitive. Each teammate has a folder of plain text files on S3 that
@@ -100,6 +100,34 @@ export class Memory {
     await this.put(scope, path, kept.map((line) => `- ${line}`).join("\n") + (kept.length ? "\n" : ""));
   }
 
+  // Every file the teammate has, by its path, such as notes/vendor-v-007.md. A key that is not a
+  // memory path is left out, so nothing else in the bucket is ever shown as memory.
+  async list(scope: MemoryScope): Promise<string[]> {
+    const prefix = key(scope, INSTRUCTIONS).slice(0, -INSTRUCTIONS.length);
+    const paths: string[] = [];
+    let token: string | undefined;
+    do {
+      const page = await this.s3.send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix, ContinuationToken: token }));
+      for (const object of page.Contents ?? []) {
+        const path = (object.Key ?? "").slice(prefix.length);
+        if (isMemoryPath(path)) paths.push(path);
+      }
+      token = page.NextContinuationToken;
+    } while (token);
+    return paths.sort();
+  }
+
+  // A person removes a note that is wrong. Its line leaves the index too, so no run looks for it.
+  async deleteNote(scope: MemoryScope, topic: string): Promise<{ deleted: boolean }> {
+    const path = notePath(topic);
+    if ((await this.read(scope, path)) === null) return { deleted: false };
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key(scope, path) }));
+    const index = (await this.read(scope, INDEX)) ?? "";
+    const kept = index.split("\n").filter((line) => line.startsWith("- ") && line !== `- ${path}`);
+    await this.put(scope, INDEX, kept.map((line) => `${line}\n`).join(""));
+    return { deleted: true };
+  }
+
   private async append(scope: MemoryScope, path: string, line: string): Promise<{ added: boolean; created: boolean }> {
     const plain = plainLine(line);
     const existing = await this.read(scope, path);
@@ -119,6 +147,13 @@ export const PROGRESS_PATH = /^progress\/[a-z0-9][a-z0-9-]{0,62}\.md$/;
 
 export function isMemoryPath(path: string): boolean {
   return (ALWAYS_READ as readonly string[]).includes(path) || NOTE_PATH.test(path) || PROGRESS_PATH.test(path);
+}
+
+// The lines of reported.md told to one person, or null when there are none. A model and a page
+// both read reported.md only through this, so nobody sees what was told to someone else.
+export function reportedTo(text: string | null, person: string): string | null {
+  const own = (text ?? "").split("\n").filter((line) => line.startsWith(`- ${person}: `));
+  return own.length ? `${own.join("\n")}\n` : null;
 }
 
 function plainLine(line: string): string {

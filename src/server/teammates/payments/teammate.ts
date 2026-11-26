@@ -10,7 +10,7 @@ export const payments = defineTeammate({
   asks: ["Which bills fall due this week?", "Why did you hold a bill back?"],
   tools: ["books.due_bills", "books.pay_bill", "memory.read", "memory.reported", "team.remind", "team.digest"],
   // The pay run at nine on a working morning, and the day's summary in the evening.
-  schedules: [{ name: PAY_RUN_TIMER, cron: "0 9 * * 1-5" }, DIGEST],
+  schedules: [{ name: PAY_RUN_TIMER, cron: "0 9 * * 1-5", label: "Pay run" }, DIGEST],
   listens: [],
   // Its pay run calls no model, so its budget only pays for chat.
   defaults: { dailyBudgetUsd: 0.25 },

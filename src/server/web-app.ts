@@ -16,7 +16,9 @@ import { rules, setRule } from "./policy";
 import { spendByDay } from "./spend";
 import { isToolName, toolDefinition, TOOLS } from "./tools";
 import { teammateKind } from "./teammates/registry";
-import { INSTRUCTIONS, MAX_INSTRUCTIONS, type Memory } from "./memory";
+import { INSTRUCTIONS, MAX_INSTRUCTIONS, type Memory, REPORTED, reportedTo } from "./memory";
+import { cancelTimer, cronWords } from "./timers";
+import { FOLLOW_UP_PREFIX } from "./tools/team";
 import type { NewsShelf } from "./news-shelf";
 
 // Mission Control's web process: the signed webhook handlers, and the API behind the board.
@@ -262,6 +264,86 @@ export function createWebApp(deps: WebDeps): Express {
       who.company, who.email, teammate, JSON.stringify({ text }),
     ]);
     response.json({ text });
+  });
+
+  // What a teammate will do next: its schedules, with their last runs, and the follow-ups it
+  // set. A follow-up belongs to the person who asked for it, so others see only their own,
+  // unless they configure the teammate.
+  app.get("/api/teammates/:id/timers", async (request, response) => {
+    const who = person(request);
+    const teammate = TeammateId.parse(request.params.id);
+    await requireTeammate(who, teammate, "can_view");
+    const admin = await mayTeammate(who, teammate, "can_configure");
+    const mate = await pool.query<{ kind: string }>("SELECT kind FROM teammates WHERE company = $1 AND id = $2", [who.company, teammate]);
+    const labels = new Map((teammateKind(mate.rows[0]?.kind ?? "")?.schedules ?? []).map((schedule) => [schedule.name, schedule.label]));
+    const { rows } = await pool.query(
+      "SELECT name, cron, fire_at, payload, last_fired_at, created_at FROM timers WHERE company = $1 AND teammate = $2 AND status = 'waiting' ORDER BY fire_at",
+      [who.company, teammate],
+    );
+    const ran = await pool.query(
+      `SELECT split_part(event.source_id, '@', 1) AS timer, run.id, run.status, run.stop_reason, run.summary, run.started_at, run.finished_at
+       FROM inbox_events event JOIN runs run ON run.id = event.run_id
+       WHERE event.company = $1 AND event.teammate = $2 AND event.source = 'timer' AND event.received_at > now() - interval '30 days'
+       ORDER BY event.received_at DESC LIMIT 200`,
+      [who.company, teammate],
+    );
+    const lastRuns = (name: string) => ran.rows.filter((row) => row.timer === name).slice(0, 5).map(({ timer: _timer, ...run }) => run);
+    const mine = (row: { payload: { person?: string | null } }) => admin || row.payload.person === who.email;
+    response.json({
+      schedules: rows.filter((row) => row.cron).map((row) => ({
+        name: row.name, label: labels.get(row.name) ?? row.name, when: cronWords(row.cron), nextAt: row.fire_at, lastAt: row.last_fired_at, runs: lastRuns(row.name),
+      })),
+      followUps: rows.filter((row) => !row.cron && String(row.name).startsWith(FOLLOW_UP_PREFIX) && mine(row)).map((row) => ({
+        name: row.name, about: String(row.payload.about ?? ""), reason: String(row.payload.reason ?? ""), at: row.fire_at, setAt: row.created_at,
+        askedBy: row.payload.person ?? null,
+      })),
+    });
+  });
+
+  // A person cancels a follow-up they asked for, or any follow-up when they configure the
+  // teammate. A schedule is never cancelled here: pausing the teammate stops all of them.
+  app.delete("/api/teammates/:id/timers/:name", async (request, response) => {
+    const who = person(request);
+    const teammate = TeammateId.parse(request.params.id);
+    const name = z.string().startsWith(FOLLOW_UP_PREFIX).max(200).parse(request.params.name);
+    await requireTeammate(who, teammate, "can_view");
+    const { rows } = await pool.query("SELECT payload FROM timers WHERE company = $1 AND teammate = $2 AND name = $3 AND status = 'waiting'", [who.company, teammate, name]);
+    if (!rows[0]) throw new HttpError(404, "There is no such follow-up waiting.");
+    if (rows[0].payload.person !== who.email) await requireTeammate(who, teammate, "can_configure", "Only the person who asked for it, or an admin, can cancel this follow-up.");
+    await cancelTimer(pool, who.company, teammate, name);
+    await pool.query("INSERT INTO audit_log (company, actor, action, subject, detail) VALUES ($1, $2, 'follow_up.cancelled', $3, $4)", [
+      who.company, who.email, `${teammate}/${name}`, JSON.stringify({ about: rows[0].payload.about ?? null }),
+    ]);
+    response.json({ name, cancelled: true });
+  });
+
+  // What a teammate remembers. Someone who may only view it reads its instructions, as its
+  // answers to them do. reported.md shows only the lines told to the person reading.
+  app.get("/api/teammates/:id/memory", async (request, response) => {
+    const who = person(request);
+    const teammate = TeammateId.parse(request.params.id);
+    await requireTeammate(who, teammate, "can_view");
+    const scope = { company: who.company, teammate };
+    const full = who.roles.includes("admin") || who.roles.includes("approver") || (await mayTeammate(who, teammate, "can_configure"));
+    const paths = full ? await deps.memory.list(scope) : [INSTRUCTIONS];
+    const files = await Promise.all(paths.map(async (file) => {
+      const text = await deps.memory.read(scope, file);
+      return { path: file, text: file === REPORTED ? reportedTo(text, who.email) : text };
+    }));
+    response.json({ full, files: files.filter((file) => file.text !== null) });
+  });
+
+  app.delete("/api/teammates/:id/memory/notes/:topic", async (request, response) => {
+    const who = person(request);
+    const teammate = TeammateId.parse(request.params.id);
+    const topic = z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).parse(request.params.topic);
+    await requireTeammate(who, teammate, "can_configure", "Only an admin can delete a note.");
+    const { deleted } = await deps.memory.deleteNote({ company: who.company, teammate }, topic);
+    if (!deleted) throw new HttpError(404, "There is no such note.");
+    await pool.query("INSERT INTO audit_log (company, actor, action, subject, detail) VALUES ($1, $2, 'note.deleted', $3, '{}')", [
+      who.company, who.email, `${teammate}/notes/${topic}.md`,
+    ]);
+    response.json({ topic, deleted: true });
   });
 
   // Anyone who sees a teammate may ask it something, and sees only their own thread with it.

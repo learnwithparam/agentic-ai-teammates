@@ -17,6 +17,20 @@ export function nextFire(cron: string, timezone: string, after: Date): Date {
   return next;
 }
 
+const DAYS: Record<string, string> = {
+  "*": "Every day", "1-5": "Weekdays", "0": "Sundays", "1": "Mondays", "2": "Tuesdays", "3": "Wednesdays", "4": "Thursdays", "5": "Fridays", "6": "Saturdays",
+};
+
+// A cron line in the words a person reads, such as "Weekdays at 09:00". A line it cannot say
+// plainly is shown as it is, so nothing is ever described wrong.
+export function cronWords(cron: string): string {
+  const [minute, hour, dayOfMonth, month, weekdays, ...rest] = cron.trim().split(/\s+/);
+  const plain = rest.length === 0 && /^\d+$/.test(minute ?? "") && /^\d+$/.test(hour ?? "") && dayOfMonth === "*" && month === "*";
+  const days = weekdays === undefined ? undefined : DAYS[weekdays];
+  if (!plain || !days) return cron;
+  return `${days} at ${hour!.padStart(2, "0")}:${minute!.padStart(2, "0")}`;
+}
+
 function columns(spec: TimerSpec) {
   if ("at" in spec) return { cron: null, timezone: null, fireAt: spec.at };
   return { cron: spec.cron, timezone: spec.timezone, fireAt: nextFire(spec.cron, spec.timezone, new Date()) };

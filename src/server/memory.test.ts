@@ -64,3 +64,17 @@ test("a teammate never tells a person the same thing twice", async () => {
   // The same words to another person are a new report.
   assert.deepEqual(await memory.report(own, "ada@bramble.example", "Lumen has not replied."), { added: true });
 });
+
+test("a teammate's files list by their paths, and a deleted note leaves the index too", async () => {
+  const own = { company: "bramble", teammate: "list-check" };
+  await memory.setInstructions(own, "Be brief.");
+  await memory.addLine(own, "vendor-a", "Pays on time.");
+  await memory.addLine(own, "vendor-ab", "Asked for a new PO.");
+  await memory.addProgress(own, "bank-check", "Asked the vendor.");
+  assert.deepEqual(await memory.list(own), ["index.md", "instructions.md", "notes/vendor-a.md", "notes/vendor-ab.md", "progress/bank-check.md"]);
+  assert.deepEqual(await memory.deleteNote(own, "vendor-a"), { deleted: true });
+  assert.deepEqual(await memory.deleteNote(own, "vendor-a"), { deleted: false });
+  assert.equal(await memory.read(own, "index.md"), "- notes/vendor-ab.md\n");
+  assert.deepEqual(await memory.list(own), ["index.md", "instructions.md", "notes/vendor-ab.md", "progress/bank-check.md"]);
+  await assert.rejects(memory.deleteNote(own, "../index"), /is not a note name/);
+});

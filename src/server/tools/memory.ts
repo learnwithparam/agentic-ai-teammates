@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type Reason, REASONS } from "../checks";
 import { payloadHash } from "../canonical";
-import { isMemoryPath, NOTE_LINES, notePath, REPORTED, vendorTopic } from "../memory";
+import { isMemoryPath, NOTE_LINES, notePath, REPORTED, reportedTo, vendorTopic } from "../memory";
 import { safeLine } from "../team-mail";
 import { matchVendor, PostBillArgs } from "./books";
 import { defineTool, readTool } from "./define";
@@ -103,9 +103,7 @@ export const memoryTools = {
     readOnly: false,
     card: () => ({ title: "What was told to a person", brief: "A standing rule asks a person before each read.", canAllowAlways: true }),
     run: async (ctx, args) => {
-      const text = await ctx.deps.memory.read(ctx.scope, REPORTED);
-      const own = (text ?? "").split("\n").filter((line) => line.startsWith(`- ${args.person}: `));
-      return { status: "done", result: { text: own.length ? `${own.join("\n")}\n` : null } };
+      return { status: "done", result: { text: reportedTo(await ctx.deps.memory.read(ctx.scope, REPORTED), args.person) } };
     },
   }),
   // Memory keeps what a person decided about a vendor, so the next invoice from that vendor can

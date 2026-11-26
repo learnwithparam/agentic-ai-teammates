@@ -8,6 +8,8 @@ import { Webhook } from "standardwebhooks";
 import { handleErrors } from "../../apps/shared/server";
 import * as client from "../client/mission-control/api";
 import { Approvals } from "./approvals";
+import type { Memory } from "./memory";
+import { setTimer } from "./timers";
 import { say } from "./conversation";
 import { Outbox } from "./outbox";
 import type { Person } from "./auth";
@@ -31,6 +33,7 @@ const RAVI: Person = { subject: "ravi-id", email: "ravi@bramble.example", name: 
 let pool: Pool;
 let close: () => Promise<void>;
 let closeMemory: () => Promise<void>;
+let memory: Memory;
 let shelf: NewsShelf;
 let closeShelf: () => Promise<void>;
 let app: Express;
@@ -58,8 +61,7 @@ const check: Check = async (_person, relation, object, context) => {
 
 before(async () => {
   ({ pool, close } = await testDatabase());
-  const { memory, close: emptyMemory } = await testMemory();
-  closeMemory = emptyMemory;
+  ({ memory, close: closeMemory } = await testMemory());
   ({ shelf, close: closeShelf } = await testNewsShelf("https://mc.example"));
   app = createWebApp({ pool, check, auth: { router: express.Router(), requirePerson }, hookSecrets: secrets, memory, news: shelf });
   app.use(handleErrors);
@@ -328,6 +330,62 @@ test("a harness teammate never reaches the board, and nobody decides its cards",
   assert.equal(decided.status, 409);
   const { rows } = await pool.query("SELECT status FROM approvals WHERE id = $1", [card.id]);
   assert.equal(rows[0].status, "pending");
+});
+
+test("a teammate's schedule shows each follow-up only to who asked for it, and only they or an admin cancel it", async () => {
+  const at = new Date(Date.now() + 86_400_000);
+  const followUp = (asker: string | null) => setTimer(pool, "bramble", "invoices", `follow:${randomUUID()}`, { at }, { about: `Bank details, asked by ${asker}`, reason: "Asked.", person: asker });
+  await followUp(RAVI.email);
+  await followUp(MEI.email);
+  await setTimer(pool, "bramble", "invoices", "digest", { cron: "0 18 * * 1-5", timezone: "Europe/Amsterdam" });
+  const schedule = async (who: Person) => {
+    signedIn = who;
+    return client.TeammateTimers.parse(await (await call("/api/teammates/invoices/timers")).json());
+  };
+  refused.add("can_configure");
+  const ravis = await schedule(RAVI);
+  assert.deepEqual(ravis.followUps.map((item) => item.askedBy), [RAVI.email]);
+  assert.deepEqual(ravis.schedules.map((item) => [item.label, item.when]), [["The day's summary", "Weekdays at 18:00"]]);
+  refused.clear();
+  assert.equal((await schedule(ADA)).followUps.length, 2);
+
+  // Mei cannot cancel Ravi's, Ravi can. A schedule is never cancelled here.
+  refused.add("can_configure");
+  const ravisName = ravis.followUps[0].name;
+  signedIn = MEI;
+  assert.equal((await call(`/api/teammates/invoices/timers/${ravisName}`, { method: "DELETE" })).status, 403);
+  assert.equal((await call("/api/teammates/invoices/timers/digest", { method: "DELETE" })).status, 400);
+  signedIn = RAVI;
+  assert.equal((await call(`/api/teammates/invoices/timers/${ravisName}`, { method: "DELETE" })).status, 200);
+  const { rows } = await pool.query("SELECT status FROM timers WHERE name = $1", [ravisName]);
+  assert.equal(rows[0].status, "cancelled");
+  assert.equal((await call(`/api/teammates/invoices/timers/${ravisName}`, { method: "DELETE" })).status, 404);
+});
+
+test("a viewer reads only a teammate's instructions, and only an admin deletes a note", async () => {
+  const scope = { company: "bramble", teammate: "invoices" };
+  await memory.setInstructions(scope, "Ask before paying Lumen.");
+  await memory.addLine(scope, "vendor-v-007", "Lumen moved bank in November.");
+  await memory.report(scope, RAVI.email, "Lumen's bill is posted.");
+  await memory.report(scope, MEI.email, "Northwind waits for Ada.");
+  const files = async (who: Person) => {
+    signedIn = who;
+    return client.TeammateMemory.parse(await (await call("/api/teammates/invoices/memory")).json());
+  };
+  refused.add("can_configure");
+  const meis = await files(MEI);
+  assert.equal(meis.full, false);
+  assert.deepEqual(meis.files.map((file) => file.path), ["instructions.md"]);
+  const ravis = await files(RAVI);
+  assert.ok(ravis.files.some((file) => file.path === "notes/vendor-v-007.md"));
+  assert.equal(ravis.files.find((file) => file.path === "reported.md")?.text, `- ${RAVI.email}: Lumen's bill is posted.\n`);
+
+  assert.equal((await call("/api/teammates/invoices/memory/notes/vendor-v-007", { method: "DELETE" })).status, 403);
+  refused.clear();
+  signedIn = ADA;
+  assert.equal((await call("/api/teammates/invoices/memory/notes/vendor-v-007", { method: "DELETE" })).status, 200);
+  assert.equal(await memory.read(scope, "notes/vendor-v-007.md"), null);
+  assert.equal((await call("/api/teammates/invoices/memory/notes/vendor-v-007", { method: "DELETE" })).status, 404);
 });
 
 test("an approver's limit travels as the condition on their approver tuple", () => {

@@ -212,6 +212,31 @@ export type AuditEntry = z.infer<typeof Audit>["entries"][number];
 
 export const Instructions = z.object({ text: z.string() });
 
+// What a teammate will do next. A schedule repeats; a follow-up fires once, for the person who asked.
+const Schedule = z.object({
+  name: z.string(),
+  label: z.string(),
+  when: z.string(),
+  nextAt: z.string(),
+  lastAt: z.string().nullable(),
+  runs: z.array(RunSummary),
+});
+const FollowUp = z.object({
+  name: z.string(),
+  about: z.string(),
+  reason: z.string(),
+  at: z.string(),
+  setAt: z.string(),
+  askedBy: z.string().nullable(),
+});
+export const TeammateTimers = z.object({ schedules: z.array(Schedule), followUps: z.array(FollowUp) });
+export type TeammateTimers = z.infer<typeof TeammateTimers>;
+
+// What a teammate remembers. full is false for someone who may only view it: they read its instructions.
+const MemoryFile = z.object({ path: z.string(), text: z.string() });
+export const TeammateMemory = z.object({ full: z.boolean(), files: z.array(MemoryFile) });
+export type TeammateMemory = z.infer<typeof TeammateMemory>;
+
 // Mission Control mounts sign-in at /api/auth. The calls themselves are shared with every page.
 export { ApiError } from "@/lib/http";
 export const { get, post, signOut } = createHttp("/api/auth");
