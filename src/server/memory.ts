@@ -59,7 +59,7 @@ export class Memory {
   // The text of a file, or null when the teammate has none yet.
   async read(scope: MemoryScope, path: string): Promise<string | null> {
     try {
-      const object = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key(scope, path) }));
+      const object = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: memoryKey(scope, path) }));
       return (await object.Body?.transformToString("utf8")) ?? null;
     } catch (error) {
       if (error instanceof NoSuchKey) return null;
@@ -103,7 +103,7 @@ export class Memory {
   // Every file the teammate has, by its path, such as notes/vendor-v-007.md. A key that is not a
   // memory path is left out, so nothing else in the bucket is ever shown as memory.
   async list(scope: MemoryScope): Promise<string[]> {
-    const prefix = key(scope, INSTRUCTIONS).slice(0, -INSTRUCTIONS.length);
+    const prefix = memoryKey(scope, INSTRUCTIONS).slice(0, -INSTRUCTIONS.length);
     const paths: string[] = [];
     let token: string | undefined;
     do {
@@ -121,7 +121,7 @@ export class Memory {
   async deleteNote(scope: MemoryScope, topic: string): Promise<{ deleted: boolean }> {
     const path = notePath(topic);
     if ((await this.read(scope, path)) === null) return { deleted: false };
-    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key(scope, path) }));
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: memoryKey(scope, path) }));
     const index = (await this.read(scope, INDEX)) ?? "";
     const kept = index.split("\n").filter((line) => line.startsWith("- ") && line !== `- ${path}`);
     await this.put(scope, INDEX, kept.map((line) => `${line}\n`).join(""));
@@ -138,7 +138,7 @@ export class Memory {
   }
 
   private async put(scope: MemoryScope, path: string, text: string) {
-    await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: key(scope, path), Body: text, ContentType: "text/markdown; charset=utf-8" }));
+    await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: memoryKey(scope, path), Body: text, ContentType: "text/markdown; charset=utf-8" }));
   }
 }
 
@@ -160,7 +160,8 @@ function plainLine(line: string): string {
   return line.replace(/\s+/g, " ").trim();
 }
 
-function key(scope: MemoryScope, path: string): string {
+// Where one memory file lives in the bucket. The browser tests use it to put a file back as it was.
+export function memoryKey(scope: MemoryScope, path: string): string {
   if (!isMemoryPath(path)) throw new Error(`"${path}" is not a memory file.`);
   for (const part of [scope.company, scope.teammate]) {
     if (!TOPIC.test(part)) throw new Error(`"${part}" cannot name a memory folder.`);

@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { expect, test } from "@playwright/test";
 import { Pool } from "pg";
 import { setting } from "../src/server/env";
-import { Memory } from "../src/server/memory";
+import { INDEX, INSTRUCTIONS, MEMORY_BUCKET, Memory, memoryKey } from "../src/server/memory";
 import { createS3 } from "../src/server/s3";
 import { ensureHarnessTeammate } from "../src/server/teammates/ensure";
 import { setTimer } from "../src/server/timers";
@@ -19,14 +20,21 @@ const FOLLOW_UP = `${FOLLOW_UP_PREFIX}browser-test-${randomUUID()}`;
 // A note the invoice teammate keeps, written the way a run writes one. Admins and approvers see it.
 const NOTE = { scope: { company: COMPANY, teammate: "invoices" }, topic: "browser-test-harbor-lane", line: "Harbor Lane sends its invoices as PDF only." };
 
+const INSTRUCTIONS_TEXT = "Ask the accounts team before you post an invoice over 5,000 EUR.";
+
 let pool: Pool;
-const memory = new Memory(createS3());
+const s3 = createS3();
+const memory = new Memory(s3);
+// The invoice teammate's own files as they were, so the tests leave its memory as they found it.
+const before = new Map<string, string | null>();
 
 test.beforeAll(async () => {
   pool = new Pool({ connectionString: setting("DATABASE_URL") });
   // A harness teammate made the way the eval and attack scripts make theirs. People never see it.
   await ensureHarnessTeammate(pool, HARNESS);
   await memory.ready();
+  for (const path of [INSTRUCTIONS, INDEX]) before.set(path, await memory.read(NOTE.scope, path));
+  await memory.setInstructions(NOTE.scope, INSTRUCTIONS_TEXT);
   await memory.addLine(NOTE.scope, NOTE.topic, NOTE.line);
   await setTimer(pool, COMPANY, "invoices", FOLLOW_UP, { at: new Date(Date.now() + 3 * 86_400_000) }, {
     about: "Harbor Lane's reply on the fitting days",
@@ -40,6 +48,10 @@ test.afterAll(async () => {
   await pool.query("DELETE FROM timers WHERE company = $1 AND name = $2", [COMPANY, FOLLOW_UP]);
   await pool.query("DELETE FROM teammates WHERE company = $1 AND id = $2", [COMPANY, HARNESS.id]);
   await memory.deleteNote(NOTE.scope, NOTE.topic);
+  for (const [path, text] of before) {
+    const where = { Bucket: MEMORY_BUCKET, Key: memoryKey(NOTE.scope, path) };
+    await s3.send(text === null ? new DeleteObjectCommand(where) : new PutObjectCommand({ ...where, Body: text, ContentType: "text/markdown; charset=utf-8" }));
+  }
   await pool.end();
 });
 
@@ -69,8 +81,9 @@ test("each teammate has its own page, and every tab has its own address", async 
 
     await page.getByRole("tab", { name: "Memory" }).click();
     await expect(page).toHaveURL(new RegExp(`/teammates/${id}/memory$`));
-    // A teammate shows its files, or says it has none yet. Either way the tab has loaded.
-    await expect(page.getByRole("heading", { name: "Instructions" }).or(page.getByText("It remembers nothing yet."))).toBeVisible();
+    // What each teammate remembers differs, so this checks the tab loaded, not what it holds.
+    await expect(page.getByRole("tabpanel")).toBeVisible();
+    await expect(page.getByText("Loading what it remembers.")).toHaveCount(0);
 
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page).toHaveURL(new RegExp(`/teammates/${id}/settings$`));
@@ -104,6 +117,7 @@ test("Mei can look, but not decide, change or delete", async ({ page }) => {
   await signIn(page, "mei", "/teammates/invoices/memory");
   await expect(page.getByText("You can read its instructions.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Instructions" })).toBeVisible();
+  await expect(page.getByText(INSTRUCTIONS_TEXT)).toBeVisible();
   await expect(page.getByText(NOTE.line)).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /^Note:/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Delete note" })).toHaveCount(0);
