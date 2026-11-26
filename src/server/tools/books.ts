@@ -80,6 +80,7 @@ export const booksTools = {
     // The guard runs the invoice checks again, here, where only the gateway's own reads count.
     // A bill posts at once only when every check passes and the total is within the teammate's limit.
     decision: "allow",
+    fixedPolicy: "Posting a bill always runs the invoice checks.",
     readOnly: false,
     ruleReason: "standing_rule",
     guard: async (ctx, args) => {
@@ -144,6 +145,7 @@ export const booksTools = {
     args: PayBillArgs,
     // Money leaves the company, so a person decides every run, under their own approval limit.
     decision: "approve",
+    fixedPolicy: "Money leaves the company, so a person approves every pay run.",
     readOnly: false,
     guard: async (ctx, args) => {
       if (new Set(args.billIds).size !== args.billIds.length) return { deny: "The pay run names a bill twice." };

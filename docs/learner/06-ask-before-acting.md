@@ -22,7 +22,9 @@ Every tool call goes to the gateway. The gateway decides it in one of three ways
 - **classify**: a quick model call judges the risk. A reply to a vendor goes this way.
 - **approve**: stop the run and ask a person.
 
-A standing rule from an admin can change a tool's default.
+Before any of that, the gateway checks that the tool is one the teammate's definition lists. The news teammate asking for `books.post_bill` gets 403, whatever the policy says.
+
+A standing rule from an admin can change a tool's default. A tool with a `fixedPolicy` ignores rules. Posting a bill always runs its checks. A pay run always waits for a person.
 Clicking "Allow always" on an approval writes such a rule, never a note in memory.
 
 When the checks fail, `post` asks for an approval and the graph waits.
@@ -67,14 +69,14 @@ Open Settings as Ada. Each tool shows its default, and you can set a standing ru
 
 ## Break it
 
-A standing rule must never let a bill skip its checks. Otherwise one click on Allow always turns them off for good.
+A standing rule must never let a bill skip its checks, or a pay run skip its person. Otherwise one admin click turns them off for good.
 
-1. Open `src/server/web-app.ts` and find `if (tool === "books.post_bill") throw new HttpError(422`.
+1. Open `src/server/web-app.ts` and find `if (fixed) throw new HttpError(422, fixed);`.
 2. Delete that line.
 3. Run `npx tsx --test src/server/web-app.test.ts`. This test in `src/server/web-app.test.ts` fails:
 
    ```text
-   "no standing rule can let a bill post without its checks"
+   "no standing rule can let a bill post without its checks, or a pay run go without a person"
    ```
 
 4. Put it back. It passes.

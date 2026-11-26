@@ -6,6 +6,8 @@ import { type Decision, toolDefinition, type ToolName } from "./tools";
 // where the teammate itself could change it.
 
 export async function decisionFor(pool: Pool, company: string, teammate: string, tool: ToolName): Promise<Decision> {
+  // A fixed policy ignores any rule, even one written straight into the table.
+  if (toolDefinition(tool).fixedPolicy) return toolDefinition(tool).decision;
   const { rows } = await pool.query<{ decision: Decision }>(
     "SELECT decision FROM tool_rules WHERE company = $1 AND teammate = $2 AND tool = $3",
     [company, teammate, tool],

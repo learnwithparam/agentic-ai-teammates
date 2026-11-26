@@ -69,6 +69,7 @@ A tool lives in a module under `src/server/tools/`. `defineTool` in `src/server/
 | `modelMayCall` | A small write inside the company that a model may call in chat. |
 | `judgeRules` | What the quick model reads to judge one call. Without them, a person decides. |
 | `ruleReason` | What a person sees when a standing rule asks them to approve every call. |
+| `fixedPolicy` | Why no standing rule may change its policy. Posting and paying a bill have one. |
 | `guard` | The tool's own hard checks. It can refuse a call or ask a person. |
 | `card` | The approval card a person sees. Every writing tool has one. |
 | `run` | The work itself, run once the call is let through. |

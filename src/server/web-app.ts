@@ -14,7 +14,7 @@ import { COMPANIES } from "./people";
 import type { Check } from "./permissions";
 import { rules, setRule } from "./policy";
 import { spendByDay } from "./spend";
-import { isToolName, TOOLS } from "./tools";
+import { isToolName, toolDefinition, TOOLS } from "./tools";
 import { INSTRUCTIONS, MAX_INSTRUCTIONS, type Memory } from "./memory";
 import type { NewsShelf } from "./news-shelf";
 
@@ -297,8 +297,9 @@ export function createWebApp(deps: WebDeps): Express {
     if (!isToolName(tool)) throw new HttpError(404, "There is no such tool.");
     const { decision } = Rule.parse(request.body);
     await requireTeammate(who, teammate, "can_configure");
-    // Posting a bill is decided by the invoice checks, never by a standing rule.
-    if (tool === "books.post_bill") throw new HttpError(422, "Posting a bill always runs the invoice checks.");
+    // Some tools keep their own policy, such as posting a bill or paying one.
+    const fixed = toolDefinition(tool).fixedPolicy;
+    if (fixed) throw new HttpError(422, fixed);
     if (decision) await setRule(pool, { company: who.company, teammate, tool, decision, setBy: who.email });
     else await pool.query("DELETE FROM tool_rules WHERE company = $1 AND teammate = $2 AND tool = $3", [who.company, teammate, tool]);
     await pool.query("INSERT INTO audit_log (company, actor, action, subject, detail) VALUES ($1, $2, 'rule.changed', $3, $4)", [

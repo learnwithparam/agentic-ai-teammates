@@ -605,8 +605,11 @@ test("an approved pay run pays each bill once, under the books' total a person's
   const [rent, licence] = BILLS.map((bill) => bill.id);
   const args = { day: "2026-11-27", billIds: [rent, licence], total: 2088, currency: "EUR" };
 
+  // A rule written straight into the table cannot let a pay run go without a person.
+  await setRule(pool, { company: "bramble", teammate: "payments", tool: "books.pay_bill", decision: "allow", setBy: "ada@bramble.example" });
   const asked = await callTool("books.pay_bill", { ...scope, args });
   assert.equal(asked.status, "needs_approval");
+  await pool.query("DELETE FROM tool_rules WHERE teammate = 'payments'");
   const card = await new Approvals(pool).get("bramble", asked.approvalId);
   // OpenFGA's within_limit reads this amount, so it is the sum of the bills in the books.
   assert.equal(card?.amount, 2088);

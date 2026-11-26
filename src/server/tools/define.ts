@@ -64,6 +64,9 @@ export type ToolDefinition<Args extends z.ZodType = z.ZodType, State = unknown> 
   judgeRules?: string;
   // The reason a person sees when a standing rule asks them to approve every call.
   ruleReason?: string;
+  // Why no standing rule may change this tool's policy. A tool that moves money, or whose own
+  // checks decide, keeps its decision whatever a rule in tool_rules says.
+  fixedPolicy?: string;
   guard?: (ctx: ToolContext, args: z.infer<Args>) => Promise<GuardResult<State>>;
   // The approval card a person sees when this call waits for them. Every writing tool has one.
   card?: (args: z.infer<Args>, reasons: string[]) => ApprovalCard;

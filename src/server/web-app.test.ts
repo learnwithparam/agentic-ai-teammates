@@ -288,10 +288,13 @@ test("only an admin changes a teammate's instructions, and everyone who views it
   assert.deepEqual(audit.rows, [{ actor: ADA.email }]);
 });
 
-test("no standing rule can let a bill post without its checks", async () => {
+test("no standing rule can let a bill post without its checks, or a pay run go without a person", async () => {
   signedIn = ADA;
   const response = await call("/api/teammates/invoices/rules/books.post_bill", { method: "PUT", body: { decision: "allow" } });
   assert.equal(response.status, 422);
+  const pay = await call("/api/teammates/payments/rules/books.pay_bill", { method: "PUT", body: { decision: "allow" } });
+  assert.equal(pay.status, 422);
+  assert.equal((await pool.query("SELECT 1 FROM tool_rules WHERE tool = 'books.pay_bill'")).rowCount, 0);
 });
 
 test("the board shows only teammates the person may view", async () => {
