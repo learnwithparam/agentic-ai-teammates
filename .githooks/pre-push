@@ -1,0 +1,30 @@
+#!/bin/sh
+# A push to main runs the whole check first, so a red commit never reaches main.
+# `npm install` turns this folder on: the prepare script sets core.hooksPath to .githooks.
+# git passes one line per pushed ref on stdin: local ref, local sha, remote ref, remote sha.
+set -e
+
+to_main=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ] && [ "$local_sha" != "0000000000000000000000000000000000000000" ]; then
+    to_main="$local_sha"
+  fi
+done
+
+[ -z "$to_main" ] && exit 0
+
+# The check runs on the files on disk, so they must be the commit being pushed.
+if [ "$to_main" != "$(git rev-parse HEAD)" ]; then
+  echo "pre-push: check out the commit you push to main first, so the check runs on it."
+  exit 1
+fi
+if ! git diff --quiet HEAD; then
+  echo "pre-push: commit or set aside your changes first, so the check runs on what you push."
+  exit 1
+fi
+
+echo "pre-push: a push to main runs npm run check first."
+if ! npm run check; then
+  echo "pre-push: npm run check failed, so nothing was pushed. Fix it and push again."
+  exit 1
+fi

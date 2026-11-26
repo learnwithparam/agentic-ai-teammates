@@ -36,8 +36,10 @@ const ENV_FILE = "src/server/env.ts";
 const CLI_FOLDER = "src/client/components/ui/";
 const COLOUR_FILE = "src/client/styles/app.css";
 const COLOUR = /#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|oklch)\(/i;
-const TEXT = /\.(ts|tsx|mjs|js|md|json|ya?ml|sh|html|css)$|^\.node-version$/;
+const TEXT = /\.(ts|tsx|mjs|js|md|json|ya?ml|sh|html|css)$|^\.node-version$|^\.githooks\/pre-push$/;
 const NODE_PIN = ".node-version";
+const PRE_PUSH = ".githooks/pre-push";
+const HOOKS_ON = "git config core.hooksPath .githooks";
 const WORKFLOW = /^\.github\/workflows\/.+\.ya?ml$/;
 
 function stripComments(path: string, body: string): string {
@@ -187,10 +189,22 @@ function nodePinProblems(files: Map<string, string>): string[] {
   return problems;
 }
 
+// A push to main runs the gate first. Without the hook, a red commit reaches main and only CI
+// notices, after the push.
+function prePushProblems(files: Map<string, string>): string[] {
+  const problems: string[] = [];
+  const hook = files.get(PRE_PUSH);
+  if (hook === undefined) problems.push(`${PRE_PUSH}: missing. A push to main must run npm run check first.`);
+  else if (!/^\s*if ! npm run check; then$/m.test(hook)) problems.push(`${PRE_PUSH}: does not stop the push when npm run check fails.`);
+  const prepare = JSON.parse(files.get("package.json") ?? "{}").scripts?.prepare ?? "";
+  if (!prepare.includes(HOOKS_ON)) problems.push(`package.json: the prepare script must run "${HOOKS_ON}", so npm install turns the hook on.`);
+  return problems;
+}
+
 export function findProblems(files: Map<string, string>, tracked: string[]): string[] {
   const bodies = new Map([...files].map(([path, body]) => [path, stripComments(path, body)]));
   const fileProblems = [...unusedFiles(files, bodies, tracked), ...missingPaths(bodies, tracked)];
-  return [...fileProblems, ...manifestProblems(files), ...productionProblems(files, bodies), ...composeProblems(files), ...nodePinProblems(files)];
+  return [...fileProblems, ...manifestProblems(files), ...productionProblems(files, bodies), ...composeProblems(files), ...nodePinProblems(files), ...prePushProblems(files)];
 }
 
 function main() {
@@ -203,7 +217,7 @@ function main() {
     console.error(problems.join("\n"));
     process.exit(1);
   }
-  console.log("check-repo: every watched file and npm script is in use, every named path exists, every dependency is pinned, app code has no stand-ins and reads settings in one place, every compose file has its own project name, CI runs the one Node in .node-version");
+  console.log("check-repo: every watched file and npm script is in use, every named path exists, every dependency is pinned, app code has no stand-ins and reads settings in one place, every compose file has its own project name, CI runs the one Node in .node-version, a push to main runs the check first");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

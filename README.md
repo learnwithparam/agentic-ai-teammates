@@ -216,7 +216,7 @@ This writes a new teammate folder from a template and adds it to the registry. T
 npm run check
 ```
 
-This runs `npm run typecheck`, the tests and the repo checks. It also checks that both models are still live on OpenRouter, then checks and builds the news page.
+This runs `npm run typecheck`, the tests and the repo checks. It also checks that both models are still live on OpenRouter, then checks and builds the news page. A push to main runs it first, and a failing check stops the push.
 
 ```bash
 npm run e2e

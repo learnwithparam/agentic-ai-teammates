@@ -2,12 +2,24 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { findProblems } from "./check-repo";
 
-const manifest = JSON.stringify({ engines: { node: ">=26" }, dependencies: { zod: "4.6.7" }, scripts: {} });
+const HOOKS_ON = "git config core.hooksPath .githooks || true";
+const manifest = JSON.stringify({ engines: { node: ">=26" }, dependencies: { zod: "4.6.7" }, scripts: { prepare: HOOKS_ON } });
+const HOOK = "#!/bin/sh\nif ! npm run check; then\n  exit 1\nfi\n";
+const BASE: [string, string][] = [["package.json", manifest], [".node-version", "24.22.3\n"], [".githooks/pre-push", HOOK]];
 
 function problemsFor(extra: Record<string, string>) {
-  const files = new Map<string, string>([["package.json", manifest], [".node-version", "24.22.3\n"], ...Object.entries(extra)]);
+  const files = new Map<string, string>([...BASE, ...Object.entries(extra)]);
   return findProblems(files, [...files.keys()]);
 }
+
+test("a push to main must run the gate first", () => {
+  assert.deepEqual(problemsFor({}), []);
+  const without = new Map(BASE.filter(([path]) => path !== ".githooks/pre-push"));
+  assert.match(findProblems(without, [...without.keys()]).join("\n"), /\.githooks\/pre-push: missing/);
+  assert.match(problemsFor({ ".githooks/pre-push": "#!/bin/sh\nnpm run check || true\n" }).join("\n"), /does not stop the push/);
+  const noPrepare = JSON.stringify({ engines: { node: ">=26" }, dependencies: { zod: "4.6.7" }, scripts: {} });
+  assert.match(problemsFor({ "package.json": noPrepare }).join("\n"), /prepare script must run "git config core\.hooksPath \.githooks"/);
+});
 
 test("a stand-in word in app code fails", () => {
   const problems = problemsFor({ "src/server/model.ts": "export const reply = 'a canned answer';" });
