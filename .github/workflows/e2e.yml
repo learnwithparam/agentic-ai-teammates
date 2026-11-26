@@ -1,0 +1,69 @@
+name: Browser tests
+
+# The browser tests sign in through Keycloak and click through Mission Control, so they need the
+# whole platform. That takes longer than a pull request should wait, so they run on main, every
+# night, and when you start them by hand. They need no model key.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            news/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci && npm ci --prefix news
+
+      - name: Start and configure the platform
+        run: npm run setup
+
+      - name: Build the pages
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start Mission Control
+        run: |
+          nohup npm run web > web.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:8790/readyz && exit 0
+            sleep 2
+          done
+          cat web.log
+          exit 1
+
+      - name: Browser tests
+        run: npm run e2e
+
+      - name: Keep the report of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+            web.log
+          retention-days: 7

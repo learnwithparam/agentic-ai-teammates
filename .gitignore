@@ -8,3 +8,5 @@ dist
 coverage
 my-scoreboard.md
 .playwright-cli/
+playwright-report/
+test-results/

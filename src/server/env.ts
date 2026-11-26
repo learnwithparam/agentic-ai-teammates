@@ -18,6 +18,7 @@ const SETTINGS = {
   TEST_DATABASE_URL: "The tests' own Postgres database. npm run setup writes it.",
   OPENROUTER_API_KEY: "Your OpenRouter key, from openrouter.ai/settings/keys. Paste it into .env.",
   OIDC_ISSUER: "The Keycloak realm that signs people in. npm run setup writes it.",
+  SEED_USER_PASSWORD: "The password of Ada, Ravi and Mei. npm run setup writes it, and the browser tests sign in with it.",
   OIDC_CLIENT_ID: "Mission Control's Keycloak client. npm run setup writes it.",
   OIDC_CLIENT_SECRET: "Mission Control's Keycloak client secret. npm run setup writes it.",
   OIDC_AUDIENCE: "The audience every access token for this API carries. npm run setup writes it.",

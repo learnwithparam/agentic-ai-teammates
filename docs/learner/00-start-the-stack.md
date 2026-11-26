@@ -106,3 +106,4 @@ An empty value is as bad as a missing one. With `OPENROUTER_API_KEY=` and nothin
 - Postgres, Keycloak, OpenFGA, MinIO and Langfuse, all running.
 - Three world apps and five Mission Control processes, each healthy.
 - One place that reads settings, which refuses to start with a gap.
+- A browser test, `npm run e2e`, that signs in as Ada, Ravi and Mei and checks what each one sees.

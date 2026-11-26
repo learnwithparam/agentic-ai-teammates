@@ -21,6 +21,7 @@
     "teammate:eval": "tsx scripts/eval.ts",
     "teammate:attack": "tsx scripts/attack.ts",
     "teammate:new": "tsx scripts/new-teammate.ts",
+    "e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && tsx --test 'scripts/**/*.test.ts' 'src/**/*.test.ts' 'apps/**/*.test.ts' 'data/**/*.test.ts' && tsx scripts/check-models.ts && tsx scripts/readable.ts && tsx scripts/plain-english.ts README.md docs/coverage.md docs/teammates.md docs/article-map.md docs/learner/*.md .claude/skills/new-teammate/SKILL.md && tsx scripts/lessons.ts && tsx scripts/check-repo.ts && npm --prefix news run check && npm run build",
     "scheduler": "tsx src/server/scheduler.ts",
@@ -69,6 +70,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.0",
     "@tailwindcss/vite": "4.3.5",
     "@types/express": "5.0.6",
     "@types/mailparser": "3.9.0",

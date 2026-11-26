@@ -217,3 +217,9 @@ npm run check
 ```
 
 This runs `npm run typecheck`, the tests and the repo checks. It also checks that both models are still live on OpenRouter, then checks and builds the news page.
+
+```bash
+npm run e2e
+```
+
+This opens Mission Control in a real browser. Ada, Ravi and Mei each sign in through Keycloak. The test then checks what each of them can see and do. Start the platform and `npm run web` first. CI runs it on every push to main and every night.
