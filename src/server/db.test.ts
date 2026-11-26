@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { Pool } from "pg";
 import { testDatabase } from "./test-database";
+import { connectWhenReady } from "./db";
 
 let pool: Pool;
 let close: () => Promise<void>;
@@ -37,4 +38,28 @@ test("a connection that drops while it is checked out does not stop the process"
   held.release(true);
   const { rows } = await pool.query<{ one: number }>("SELECT 1 AS one");
   assert.equal(rows[0].one, 1);
+});
+
+// A pool whose first answers are the given errors, then a connection.
+function refusing(...codes: string[]) {
+  let tries = 0;
+  const client = { release() {} };
+  const pool = {
+    async connect() {
+      const code = codes[tries++];
+      if (code) throw Object.assign(new Error(`refused with ${code}`), { code });
+      return client;
+    },
+  };
+  return { pool: pool as unknown as Pool, client, tries: () => tries };
+}
+
+test("a process that starts while Postgres recovers waits for it, and a wrong password still fails at once", async () => {
+  const recovering = refusing("57P03", "57P03");
+  assert.equal(await connectWhenReady(recovering.pool, 1000, 1), recovering.client);
+  assert.equal(recovering.tries(), 3);
+
+  const wrong = refusing("28P01");
+  await assert.rejects(connectWhenReady(wrong.pool, 1000, 1), /28P01/);
+  assert.equal(wrong.tries(), 1);
 });

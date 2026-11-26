@@ -1,4 +1,4 @@
-import type { MailMessage, MailSource, OutgoingReply } from "./types";
+import type { MailFound, MailMessage, MailSource, OutgoingReply } from "./types";
 import { serviceClient } from "./http";
 
 // LMail, through its program API, for one mailbox: the company's accounts address.
@@ -31,6 +31,10 @@ export class LMail implements MailSource {
     const message = await this.service.json<LMailMessage>(`/api/v1/messages/${encodeURIComponent(id)}`);
     const { messageId, fromName, subject, text, receivedAt, attachments } = message;
     return { id: message.id, messageId, from: message.fromAddress, fromName, subject, text, receivedAt, attachments };
+  }
+
+  search(text: string) {
+    return this.service.json<MailFound[]>(`${this.box}/search?q=${encodeURIComponent(text)}`);
   }
 
   attachment(messageId: string, attachmentId: string) {

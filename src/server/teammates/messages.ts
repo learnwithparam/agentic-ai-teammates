@@ -5,6 +5,8 @@ import { CapReached, type Run } from "../run";
 import { toolDefinition, type ToolName } from "../tools";
 import type { TeammateDefinition } from "./define";
 import { prompt } from "../prompts";
+import { COMPANIES } from "../people";
+import { comingDays, companyTime } from "./timed";
 
 // What every teammate does when a person writes to it in Mission Control. The web server sets how
 // far it may look. Someone who only views the teammate gets what the board already shows them.
@@ -20,6 +22,14 @@ const MemoryText = z.object({ text: z.string().nullable() });
 const ANSWER_RULES = prompt(import.meta.url, "answer");
 
 const ACT_RULES = prompt(import.meta.url, "act");
+
+const READ_ONLY_RULES = prompt(import.meta.url, "read-only");
+
+// A conversation that may act is never also told it cannot: given both, a model reads tool after
+// tool and never acts. Only a read-only conversation says where to do it on the board instead.
+export function answerRules(acts: boolean): string {
+  return `${ANSWER_RULES}\n${acts ? ACT_RULES : READ_ONLY_RULES}`;
+}
 
 // Takes the person.message events in a batch, answers each person once, and returns the rest.
 // Three quick messages from one person get one answer, as the article's inbox batching asks.
@@ -38,7 +48,7 @@ export async function handleMessages(run: Run, events: InboxEvent[], definition:
     const last = messages.at(-1) as Message;
     const thread = `message:${last.messageId}`;
     try {
-      await answer(run, thread, messages, chatTools(definition, messages));
+      await answer(run, thread, events[0].company, messages, chatTools(definition, messages));
     } catch (error) {
       if (!(error instanceof CapReached)) throw error;
       await run.reply(last.person, last.messageId, "I reached my limit for this run, so I could not look into this. Ask me again later.");
@@ -83,21 +93,22 @@ export function fixedPart(rules: string, memory: Record<string, string | null>):
   return `${rules}\n\n${MEMORY_RULE}\n<memory>\n${files}\n</memory>`;
 }
 
-async function answer(run: Run, thread: string, messages: Message[], tools: ToolName[]) {
+async function answer(run: Run, thread: string, company: string, messages: Message[], tools: ToolName[]) {
   const last = messages.at(-1) as Message;
   const acts = tools.some((tool) => toolDefinition(tool).modelMayCall);
   const reach = messages.every((message) => message.reach === "tools") ? "tools" : "board";
   const memory = await standingMemory(run, thread, { person: last.person, reach });
-  const context = { now: new Date().toISOString(), person: last.person, ...(await run.talkContext(last.person)) };
+  const now = new Date();
+  const context = { now: now.toISOString(), today: companyTime(now, COMPANIES[company].timezone), nextDays: comingDays(now, COMPANIES[company].timezone), person: last.person, ...(await run.talkContext(last.person)) };
   const asked = messages.map((message) => message.text).join("\n\n");
   const result = await run.toolLoop({
     threadId: thread,
-    task: "answer",
+    task: acts ? "act" : "answer",
     risk: "low",
     maxTokens: 600,
     tools,
     messages: [
-      { role: "system", content: fixedPart(acts ? `${ANSWER_RULES}\n${ACT_RULES}` : ANSWER_RULES, memory) },
+      { role: "system", content: fixedPart(answerRules(acts), memory) },
       { role: "user", content: `What you know:\n${JSON.stringify(context, null, 2)}\n\n${last.from} asks:\n${asked}` },
     ],
   });

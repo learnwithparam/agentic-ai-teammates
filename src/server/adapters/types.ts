@@ -16,12 +16,17 @@ export type MailMessage = {
   attachments: { id: string; filename: string; contentType: string; size: number }[];
 };
 
+// One line per message a search finds: enough to pick one and hand it over, never the body.
+export type MailFound = { id: string; from: string; subject: string; receivedAt: string; attachments: { id: string; filename: string }[] };
+
 export type OutgoingReply = { to: string; subject: string; text: string; inReplyTo: string | null };
 
 export interface MailSource {
   // The messages that arrived after a history id, and the history id to read from next time.
   history(startHistoryId: string): Promise<{ messageIds: string[]; historyId: string }>;
   message(id: string): Promise<MailMessage>;
+  // The newest inbox messages, at most 10, whose sender, subject, text or attachment name holds the words.
+  search(text: string): Promise<MailFound[]>;
   attachment(messageId: string, attachmentId: string): Promise<{ contentType: string; bytes: Uint8Array }>;
   // Sends once per key: a retry with the same key never sends twice.
   send(reply: OutgoingReply, idempotencyKey: string): Promise<{ id: string }>;

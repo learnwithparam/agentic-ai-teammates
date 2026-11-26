@@ -17,6 +17,11 @@ export const mailTools = {
     z.object({ startHistoryId: z.string().regex(/^\d+$/) }),
     (ctx, args) => ctx.deps.mail(ctx.scope.company).history(args.startHistoryId),
   ),
+  "mail.search": readTool(
+    "Find mail by a word or number, such as an invoice number or a vendor's name. Returns up to 10 messages, newest first, with their attachment ids.",
+    z.object({ text: z.string().trim().min(2).max(200) }),
+    (ctx, args) => ctx.deps.mail(ctx.scope.company).search(args.text),
+  ),
   "mail.message": readTool("Read one email: sender, subject, body text and attachment names.", z.object({ id: Text }), async (ctx, args) => {
     const message = await ctx.deps.mail(ctx.scope.company).message(args.id);
     return { ...message, text: message.text.slice(0, 20_000) };

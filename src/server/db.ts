@@ -33,9 +33,27 @@ export function createPool(connectionString: string, searchPath?: string): pg.Po
   return pool;
 }
 
+// Postgres refuses connections while it starts or recovers after a crash. 57P03 is "cannot
+// connect now". A process started in that window waits instead of dying.
+const NOT_READY = new Set(["57P03", "ECONNREFUSED", "ECONNRESET"]);
+
+export async function connectWhenReady(pool: pg.Pool, waitMs = 120_000, stepMs = 2000): Promise<pg.PoolClient> {
+  const until = Date.now() + waitMs;
+  for (;;) {
+    try {
+      return await pool.connect();
+    } catch (error) {
+      const code = (error as { code?: string }).code ?? "";
+      if (!NOT_READY.has(code) || Date.now() + stepMs > until) throw error;
+      console.error(`Postgres is not taking connections yet (${describeError(error)}), so this process waits.`);
+      await new Promise((resolve) => setTimeout(resolve, stepMs));
+    }
+  }
+}
+
 // Each app passes its own folder of migrations; Mission Control's is the default.
 export async function migrate(pool: pg.Pool, folder = MIGRATIONS): Promise<string[]> {
-  const client = await pool.connect();
+  const client = await connectWhenReady(pool);
   try {
     // One process at a time: a second one waits here instead of running the same file twice.
     await client.query("SELECT pg_advisory_lock(hashtext(current_database()))");

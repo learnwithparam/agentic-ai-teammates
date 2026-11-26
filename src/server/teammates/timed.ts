@@ -15,6 +15,27 @@ export function companyDay(at: Date, timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
 }
 
+// The time as someone at the company reads it, weekday first, such as "Thursday, 26 November
+// 2026 at 03:36 (Europe/Amsterdam)". Given only an ISO time, a model asked to look again "on
+// Friday" set the follow-up for Saturday.
+export function companyTime(at: Date, timezone: string): string {
+  const text = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(at);
+  return `${text} (${timezone})`;
+}
+
+// The next seven days on the company's clock, each named, such as "Friday, 27 November 2026
+// (2026-11-27)". Given today's weekday alone, the quick model still counted Friday as the 28th.
+// With the days written out, "on Friday" is a lookup, not a sum.
+export function comingDays(at: Date, timezone: string): string[] {
+  const name = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  // Counted from noon on today's date, so a clock change near midnight never skips or repeats a day.
+  const [year, month, date] = companyDay(at, timezone).split("-").map(Number);
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(Date.UTC(year, month - 1, date + index + 1, 12));
+    return `${name.format(day)} (${companyDay(day, timezone)})`;
+  });
+}
+
 // Handles the shared timer events in a batch: reminders and the digest. The teammate's own
 // schedules and its follow-ups pass on with the rest.
 export async function handleTimers(run: Run, events: InboxEvent[], options: { own: ReadonlySet<string>; digest: boolean }): Promise<InboxEvent[]> {

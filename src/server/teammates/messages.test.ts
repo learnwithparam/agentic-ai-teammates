@@ -9,7 +9,7 @@ import { Run, RUN_CAPS } from "../run";
 import { testDatabase } from "../test-database";
 import type { ToolName } from "../tools";
 import { invoice } from "./invoice/teammate";
-import { fixedPart, handleMessages } from "./messages";
+import { answerRules, fixedPart, handleMessages } from "./messages";
 
 // A teammate whose chat reads with the given tools.
 function reading(reads: ToolName[]) {
@@ -70,6 +70,9 @@ test("a teammate answers a person once, from read-only tools and its own recent 
   // The rules and the memory come first, so they can be cached. What changes each run comes after.
   assert.match(String(asks[0].messages[0].content), /Ask before paying Lumen/);
   assert.match(String(asks[0].messages.at(-1)?.content), /waitingForAPerson/);
+  // The weekday on the company's clock, and the coming days by name, so "on Friday" lands on Friday.
+  assert.match(String(asks[0].messages.at(-1)?.content), /"nextDays": \[\n\s+"\w+, \d+ \w+ \d{4} \(\d{4}-\d\d-\d\d\)"/);
+  assert.match(String(asks[0].messages.at(-1)?.content), /"today": "(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d+ \w+ \d{4} at \d\d:\d\d \(Europe\/Amsterdam\)"/);
   assert.doesNotMatch(String(asks[0].messages[0].content), /waitingForAPerson|What waits for me/);
   const lines = await conversation(pool, "bramble", "invoices", MEI);
   assert.deepEqual(lines.map((line) => [line.role, line.text]), [["person", "What waits for me?"], ["teammate", "Nothing waits for you today."]]);
@@ -145,4 +148,21 @@ test("a note cannot close the memory tags and speak as the rules", () => {
   assert.equal(text.match(/<\/memory>/g)?.length, 1);
   assert.ok(text.endsWith("</memory>"));
   assert.match(text, /<\\\/memory>/);
+});
+
+test("a conversation that may act is never told it cannot, and a read-only one always is", () => {
+  assert.ok(!answerRules(true).includes("You cannot post"), "act rules carry the read-only line");
+  assert.ok(answerRules(true).includes("team.hand_over"));
+  assert.ok(answerRules(false).includes("You cannot post"));
+  assert.ok(!answerRules(false).includes("team.hand_over"));
+});
+
+test("a conversation that may act asks for the deeper look, and one that only reads asks for the quick one", async () => {
+  const acting = { tools: ["memory.read", "memory.reported", "mail.search", "team.follow_up"] as ToolName[], capabilities: { chat: { mode: "act" as const, reads: ["mail.search"] as ToolName[] }, followUps: true, digest: false, tidy: false } };
+  const asks: ModelAsk[] = [];
+  await handleMessages(await startRun(asks), [messageEvent(randomUUID(), "On Friday, check on Lumen.", "tools")], acting);
+  assert.equal(asks[0].task, "act");
+  assert.ok(asks[0].tools?.includes("team.follow_up"));
+  await handleMessages(await startRun(asks), [messageEvent(randomUUID(), "On Friday, check on Lumen.", "board")], acting);
+  assert.equal(asks[1].task, "answer");
 });

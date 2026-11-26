@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import { GMAIL_API, googleClient, startCursor } from "./google";
 import { ServiceError } from "./http";
-import type { MailMessage, MailSource, OutgoingReply } from "./types";
+import type { MailFound, MailMessage, MailSource, OutgoingReply } from "./types";
 
 // Gmail, through its REST API, for the one account the refresh token signs in as. It answers the
 // same questions as LMail, so the invoice teammate cannot tell which one it reads.
@@ -65,6 +65,18 @@ export class Gmail implements MailSource {
         .filter((part) => part.filename && part.body?.attachmentId)
         .map((part) => ({ id: part.partId!, filename: part.filename!, contentType: part.mimeType ?? "application/octet-stream", size: part.body?.size ?? 0 })),
     };
+  }
+
+  // Gmail's own search, in the inbox only. Its words match the sender, subject, text and file names.
+  async search(text: string): Promise<MailFound[]> {
+    const query = new URLSearchParams({ q: `in:inbox ${text.replace(/["]/g, "")}`, maxResults: "10" });
+    const page = await this.api.json<{ messages?: { id: string }[] }>(`messages?${query}`);
+    const found: MailFound[] = [];
+    for (const { id } of page.messages ?? []) {
+      const message = await this.message(id);
+      found.push({ id, from: message.from, subject: message.subject, receivedAt: message.receivedAt, attachments: message.attachments.map(({ id: part, filename }) => ({ id: part, filename })) });
+    }
+    return found;
   }
 
   async attachment(messageId: string, attachmentId: string) {

@@ -11,6 +11,7 @@ export const invoice = defineTeammate({
   tools: [
     "mail.history",
     "mail.message",
+    "mail.search",
     "mail.attachment_text",
     "mail.reply",
     "drive.changes",
@@ -36,7 +37,7 @@ export const invoice = defineTeammate({
   defaults: { dailyBudgetUsd: 1 },
   capabilities: {
     // A person may ask it to look at something later, or hand it a bill to post, so chat acts.
-    chat: { mode: "act", reads: ["books.find_vendor", "books.purchase_order", "books.vendor_bills", "mail.history", "mail.message", "drive.changes"] },
+    chat: { mode: "act", reads: ["books.find_vendor", "books.purchase_order", "books.vendor_bills", "mail.search", "mail.message", "drive.changes"] },
     followUps: true,
     digest: true,
     // Its vendor notes grow with every invoice, so once a week it proposes shorter ones.

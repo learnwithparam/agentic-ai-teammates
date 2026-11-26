@@ -171,6 +171,30 @@ export class MailStore {
     return { historyId: boxes[0].history_id, messagesAdded: rows.map((row) => ({ id: row.id, historyId: row.history_id })) };
   }
 
+  // The inbox messages whose sender, subject, text or attachment name holds the words, newest first.
+  async search(mailbox: string, text: string) {
+    const like = `%${text.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    const { rows } = await this.pool.query<{ id: string; from_address: string; subject: string; received_at: Date }>(
+      `SELECT m.id, m.from_address, m.subject, m.received_at FROM messages m
+       WHERE m.mailbox = $1 AND m.folder = 'inbox'
+         AND (m.subject ILIKE $2 OR m.text_body ILIKE $2 OR m.from_address ILIKE $2
+              OR EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.filename ILIKE $2))
+       ORDER BY m.received_at DESC LIMIT 10`,
+      [normalize(mailbox), like],
+    );
+    const files = await this.pool.query<{ id: string; message_id: string; filename: string }>(
+      "SELECT id, message_id, filename FROM attachments WHERE message_id = ANY($1) ORDER BY filename",
+      [rows.map((row) => row.id)],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      from: row.from_address,
+      subject: row.subject,
+      receivedAt: row.received_at.toISOString(),
+      attachments: files.rows.filter((file) => file.message_id === row.id).map((file) => ({ id: file.id, filename: file.filename })),
+    }));
+  }
+
   async list(mailbox: string, folder: string): Promise<MessageSummary[]> {
     const { rows } = await this.pool.query(
       `SELECT m.id, m.folder, m.from_address, m.from_name, m.to_addresses, m.subject, left(m.text_body, 160) AS preview,

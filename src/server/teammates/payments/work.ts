@@ -56,7 +56,10 @@ export function paymentsTeammate(checkpointer: BaseCheckpointSaver) {
     const state = await graph.getState(config);
     if ("start" in item) {
       // A day that finished, or waits for a person, is never started again, so it pays once.
-      if (state.values?.day && (state.next.length === 0 || state.next.includes("wait"))) return null;
+      if (state.values?.day && (state.next.length === 0 || state.next.includes("wait"))) {
+        await run.note("note", `The pay run for ${item.start.day} already ran, so it does not run again`, { threadId: item.threadId });
+        return null;
+      }
       if (state.values?.day) await graph.invoke(null, config);
       else await graph.invoke({ day: item.start.day, ...FRESH_STATE }, config);
     } else if (state.next.length > 0 && !state.next.includes("wait")) {

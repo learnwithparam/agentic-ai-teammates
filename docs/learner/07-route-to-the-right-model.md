@@ -21,7 +21,8 @@ There are two tiers: a quick check and a deeper look. The UI never names the mod
 `route` in `src/server/router.ts` is a plain function. It takes the task, the risk, the dollars left today and how earlier tries went:
 
 - `classify`, `extract`, `summarize` and `answer` start on the quick check.
-- `screen`, `investigate`, `brief` and `select` go to the deeper look. Screening moved there after the quick check missed the injection invoice 4 times in 10.
+- `screen`, `investigate`, `brief`, `select`, `tidy` and `act` go to the deeper look. Screening moved there after the quick check missed the injection invoice 4 times in 10.
+- `act` is a chat that may set a follow-up or take on a bill in a person's name. On the quick check it once set a follow-up for the wrong day. The next time, it set none.
 - A schema failure or an error on the quick check steps up to the deeper look. Low confidence steps up only when the risk is high.
 - A failure on the deeper look goes to a person.
 - When the day's budget cannot cover one deeper look, the call goes to a person.

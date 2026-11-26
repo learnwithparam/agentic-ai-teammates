@@ -68,6 +68,12 @@ app.get("/api/v1/mailboxes/:address/history", requireScope("mail.read"), async (
   response.json(await store.history(programMailbox(request, String(request.params.address)), start));
 });
 
+app.get("/api/v1/mailboxes/:address/search", requireScope("mail.read"), async (request, response) => {
+  const text = String(request.query.q ?? "").trim();
+  if (text.length < 2 || text.length > 200) throw new HttpError(400, "q is between 2 and 200 characters.");
+  response.json(await store.search(programMailbox(request, String(request.params.address)), text));
+});
+
 app.get("/api/v1/messages/:id", requireScope("mail.read"), async (request, response) => {
   const message = await store.get(String(request.params.id));
   if (!message) throw new HttpError(404, "No such message.");

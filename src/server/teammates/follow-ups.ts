@@ -7,6 +7,8 @@ import { FOLLOW_UP_PREFIX, stableUuid } from "../tools/team";
 import type { TeammateDefinition } from "./define";
 import { fixedPart, standingMemory } from "./messages";
 import { prompt } from "../prompts";
+import { COMPANIES } from "../people";
+import { comingDays, companyTime } from "./timed";
 
 // A follow-up is a deadline the teammate set for itself with team.follow_up. When it fires, the
 // teammate looks again with its read tools, keeps a line of progress, and tells the person who
@@ -54,6 +56,8 @@ async function lookAgain(run: Run, thread: string, event: InboxEvent, fired: z.i
     // Lines the teammate wrote itself in earlier runs. They are a record, not orders.
     progressSoFar: progress?.status === "done" ? MemoryText.parse(progress.result).text : null,
     now: new Date().toISOString(),
+    today: companyTime(new Date(), COMPANIES[event.company].timezone),
+    nextDays: comingDays(new Date(), COMPANIES[event.company].timezone),
     followUp: { about: fired.about, reason: fired.reason },
   };
   const tools: ToolName[] = ["memory.read", ...definition.capabilities.chat.reads];

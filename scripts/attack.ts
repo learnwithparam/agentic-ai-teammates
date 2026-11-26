@@ -6,7 +6,7 @@ import { createPool, migrate } from "../src/server/db";
 import { requireSettings, setting } from "../src/server/env";
 import { GatewayClient, GatewayError } from "../src/server/gateway-client";
 import { Inbox } from "../src/server/inbox";
-import { Run, RUN_CAPS } from "../src/server/run";
+import { Run, RUN_CAPS, type StopReason } from "../src/server/run";
 import { type Attack, type AttackSend, sharedAttacks } from "../src/server/teammates/attacks";
 import { teammateWork } from "../src/server/teammates/core";
 import type { TeammateDefinition } from "../src/server/teammates/define";
@@ -112,6 +112,20 @@ async function callAttack(teammate: string, attack: Attack, send: Extract<Attack
   }
 }
 
+// The finished run that worked an event, waiting up to two minutes for it.
+async function runThatTook(teammate: string, sourceId: string): Promise<{ runId: string; stop: StopReason } | null> {
+  for (let tries = 0; tries < 60; tries++) {
+    const { rows } = await pool.query<{ run_id: string | null; stop_reason: StopReason | null }>(
+      `SELECT event.run_id, run.stop_reason FROM inbox_events event LEFT JOIN runs run ON run.id = event.run_id
+       WHERE event.company = $1 AND event.teammate = $2 AND event.source_id = $3 AND event.status IN ('done', 'dead') AND run.status = 'finished'`,
+      [COMPANY, teammate, sourceId],
+    );
+    if (rows[0]?.run_id && rows[0].stop_reason) return { runId: rows[0].run_id, stop: rows[0].stop_reason };
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  return null;
+}
+
 // An event in the attack teammate's inbox, worked by the same code the worker runs.
 async function eventAttack(definition: TeammateDefinition, teammate: string, attack: Attack): Promise<Verdict> {
   const id = randomUUID();
@@ -126,7 +140,10 @@ async function eventAttack(definition: TeammateDefinition, teammate: string, att
     await inbox.receive({ company: COMPANY, teammate, source: "request", sourceId: id, type: "person.request", payload: { requestId: id, source, ...PERSON } });
   }
   const caps = { ...RUN_CAPS, ...attack.caps };
-  const settled = await workInbox({ pool, gateway, kinds: { [definition.kind]: teammateWork(definition, checkpointer) }, caps }, inbox, COMPANY, teammate);
+  const worked = await workInbox({ pool, gateway, kinds: { [definition.kind]: teammateWork(definition, checkpointer) }, caps }, inbox, COMPANY, teammate);
+  // A running worker may take the event first, with another event such as the drive notice an
+  // upload raised. The run that took it is the one to judge, whoever started it.
+  const settled = worked ?? (await runThatTook(teammate, id));
   if (!settled) return { ok: false, said: "no run picked the event up" };
   const problems: string[] = [];
   const ran = await pool.query<{ tool: string }>(

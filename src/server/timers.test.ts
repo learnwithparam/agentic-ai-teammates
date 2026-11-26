@@ -4,7 +4,7 @@ import { after, before, beforeEach, test } from "node:test";
 import type { Pool } from "pg";
 import { Approvals, REMIND_AFTER_HOURS, reminderName } from "./approvals";
 import { ensureStandingSchedules } from "./scheduler-loop";
-import { companyDay } from "./teammates/timed";
+import { comingDays, companyDay, companyTime } from "./teammates/timed";
 import { testDatabase } from "./test-database";
 import { cancelTimer, fireDue, nextFire, setTimer } from "./timers";
 import { TEAMMATES } from "./teammates/registry";
@@ -115,4 +115,17 @@ test("an approval sets a reminder for a day later, and a decision cancels it", a
     approve: true, allowAlways: false, note: null,
   });
   assert.equal((await timer(reminderName(approval.id))).status, "cancelled");
+});
+
+test("the company's time reads weekday first on its own clock, which can be a day past UTC", () => {
+  assert.equal(companyTime(new Date("2026-11-26T23:30:00Z"), "Europe/Amsterdam"), "Friday, 27 November 2026 at 00:30 (Europe/Amsterdam)");
+});
+
+test("the coming days are named on the company's clock, so Friday after a Thursday is the 27th", () => {
+  const days = comingDays(new Date("2026-11-26T02:40:00Z"), "Europe/Amsterdam");
+  assert.equal(days.length, 7);
+  assert.equal(days[0], "Friday, 27 November 2026 (2026-11-27)");
+  assert.equal(days[6], "Thursday, 3 December 2026 (2026-12-03)");
+  // Half past midnight on the night the clocks go back: the next day is still the next day.
+  assert.equal(comingDays(new Date("2026-10-24T22:30:00Z"), "Europe/Amsterdam")[0], "Monday, 26 October 2026 (2026-10-26)");
 });

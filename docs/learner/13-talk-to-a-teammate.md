@@ -18,12 +18,14 @@ Lessons 00 to 08 are done and the stack is running. You can sign in as Ravi, an 
 
 ## How it works
 
-The chat panel is "Talk to Invoices teammate" on the right of Mission Control. A message is an inbox event like a mail. A run answers it with the teammate's own tools and rules.
+The chat panel is "Talk to Invoice teammate" on the right of Mission Control. A message is an inbox event like a mail. A run answers it with the teammate's own tools and rules.
 
 `capabilities.chat` in the teammate's definition says how far chat may go:
 
 - `read`: the teammate answers from the tools in `reads`, and writes nothing.
 - `act`: it may also make small writes that stay inside the company. It can set a follow-up, keep a note, or take a bill handed over with `team.hand_over`.
+
+An `act` chat finds a bill with `mail.search`, by its number or sender. It gets the next seven days by name, so "on Friday" is a lookup, not a sum. It runs on the deeper look, because it decides what to do in a person's name.
 
 A message can never make it post, send or publish by itself. Those writes go through the same checks and approvals as on a quiet morning.
 
@@ -72,7 +74,7 @@ Send the fit-out invoice. At 6,400 EUR it is above the teammate's own limit, so 
 npm run invoices:send -- 13-harbor-fit-out
 ```
 
-Sign in to Mission Control as `ravi@bramble.example`. Open "Talk to Invoices teammate" and write:
+Sign in to Mission Control as `ravi@bramble.example`. Open "Talk to Invoice teammate" and write:
 
 ```text
 Please post Harbor Lane's fit-out invoice, HL-FIT-07.
