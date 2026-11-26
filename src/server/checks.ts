@@ -77,3 +77,7 @@ export function checkInvoice(invoice: Invoice, facts: BookFacts, rules: CheckRul
   if (invoice.total > rules.autoPostLimit) reasons.push("over_limit");
   return reasons;
 }
+
+// What the gateway says when a card for the same bill already waits. The invoice teammate reads
+// it as "nothing to send": the person already has the bill in front of them.
+export const CARD_WAITS = "A card for this bill already waits for a person";

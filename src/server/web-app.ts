@@ -120,6 +120,7 @@ export function createWebApp(deps: WebDeps): Express {
   });
 
   // Everything the board shows, in one call: the roster, the four columns and the spend chart.
+  // A harness teammate (an eval or an attack run) does no work for a person, so it is left out.
   app.get("/api/board", async (request, response) => {
     const who = person(request);
     const company = who.company;
@@ -128,7 +129,7 @@ export function createWebApp(deps: WebDeps): Express {
          (SELECT count(*) FROM inbox_events event WHERE event.company = mate.company AND event.teammate = mate.id AND event.status IN ('queued', 'claimed'))::int AS waiting,
          (SELECT row_to_json(last) FROM (SELECT id, status, stop_reason, summary, started_at, finished_at FROM runs
             WHERE runs.company = mate.company AND runs.teammate = mate.id ORDER BY started_at DESC LIMIT 1) last) AS last_run
-       FROM teammates mate WHERE mate.company = $1 ORDER BY mate.id`,
+       FROM teammates mate WHERE mate.company = $1 AND NOT mate.harness ORDER BY mate.id`,
       [company],
     );
     const visible = [];
@@ -199,6 +200,9 @@ export function createWebApp(deps: WebDeps): Express {
     const body = Decide.parse(request.body);
     const approval = await approvals.get(who.company, id);
     if (!approval) throw new HttpError(404, "There is no such approval.");
+    // A card from an eval or an attack run tests the gates. Approving it would do real work for nobody.
+    const harness = await pool.query("SELECT 1 FROM teammates WHERE company = $1 AND id = $2 AND harness", [who.company, approval.teammate]);
+    if (harness.rows[0]) throw new HttpError(409, "This card comes from a test run, so nobody decides it.");
     // An approver's limit is in the company's currency, so an amount in another currency is an admin's call.
     const foreign = approval.currency !== null && approval.currency !== COMPANIES[who.company].currency;
     if (foreign) await requireTeammate(who, approval.teammate, "can_configure", "An amount in another currency needs an admin.");

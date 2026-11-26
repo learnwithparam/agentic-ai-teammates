@@ -19,6 +19,7 @@ import { testDatabase } from "./test-database";
 import { type ToolName, TOOLS } from "./tools";
 import type { NewsShelf } from "./news-shelf";
 import { testMemory, testNewsShelf } from "./test-memory";
+import { CARD_WAITS } from "./checks";
 
 // The gateway's writing tools against a real Postgres. A standing rule a person sets must hold
 // for every writing tool. Publishing the news once ignored it and went straight to the outbox.
@@ -520,6 +521,29 @@ test("only someone who decides approvals can hand over a bill, and it posts unde
   assert.match((await post(3000, "LP-92", { source: { ...source, id: "m-91" } })).reason, /does not name this document/);
   assert.equal((await post(3000, "LP-93", { requestId: null })).status, "needs_approval");
   modelCall = async () => unreachable("a model");
+});
+
+test("the same bill sent in a second mail gets no second card while the first one waits", async () => {
+  const runId = await startRun("invoices");
+  const invoice = {
+    vendorName: "Lumen Print House", vendorEmail: null, invoiceNumber: "LP-120", invoiceDate: "2026-11-20", dueDate: null,
+    currency: "EUR", iban: null, poNumber: null, lines: [{ description: "Posters", amount: 9000 }], tax: 0, total: 9000,
+  };
+  const post = (mail: string, vendorName = invoice.vendorName) =>
+    callTool("books.post_bill", {
+      runId, company: "bramble", teammate: "invoices", threadId: `invoice:mail:${mail}`,
+      args: { invoice: { ...invoice, vendorName }, source: { kind: "mail", id: mail, attachmentId: "a-1", sender: "billing@lumen.example", subject: null, messageId: null }, brief: null },
+    });
+  const first = await post("m-120");
+  assert.equal(first.status, "needs_approval");
+  // A retried run in the same thread gets its own card back.
+  assert.equal((await post("m-120")).approvalId, first.approvalId);
+  // The vendor sends it again, in another mail, with the name in other letters: no second card.
+  const again = await post("m-121", "LUMEN PRINT HOUSE");
+  assert.equal(again.status, "denied");
+  assert.match(again.reason, new RegExp(`^${CARD_WAITS}`));
+  const { rows } = await pool.query("SELECT count(*)::int AS cards FROM approvals WHERE args->'invoice'->>'invoiceNumber' = 'LP-120'");
+  assert.equal(rows[0].cards, 1);
 });
 
 test("a model can never read reported.md whole: the core reads one person's lines", async () => {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Accounting } from "../adapters/types";
 import { payloadHash } from "../canonical";
-import { checkInvoice, Invoice, PO_TOLERANCE, type Reason, REASONS } from "../checks";
+import { CARD_WAITS, checkInvoice, Invoice, PO_TOLERANCE, type Reason, REASONS } from "../checks";
 import { daysAfter, payProblems, runTotal } from "../payments";
 import { COMPANIES } from "../people";
 import { askerAsPerson, Authority } from "./asker";
@@ -54,6 +54,17 @@ async function handedOver(ctx: ToolContext, requestId: string) {
   return rows[0] ? Request.parse(rows[0].payload) : null;
 }
 
+// A card already waiting for the same bill, from another mail or file. A vendor who sends the
+// invoice twice gets one card, not two. The same thread is left out: a retried run reuses its card.
+async function waitingCard(ctx: ToolContext, invoice: Invoice) {
+  const { rows } = await ctx.deps.pool.query<{ id: string }>(
+    `SELECT id FROM approvals WHERE company = $1 AND teammate = $2 AND tool = 'books.post_bill' AND status = 'pending' AND thread_id <> $3
+       AND args->'invoice'->>'invoiceNumber' = $4 AND lower(args->'invoice'->>'vendorName') = lower($5) LIMIT 1`,
+    [ctx.scope.company, ctx.scope.teammate, ctx.scope.threadId, invoice.invoiceNumber, invoice.vendorName],
+  );
+  return rows[0]?.id ?? null;
+}
+
 const sameDocument = (a: InvoiceSource, b: InvoiceSource) => a.kind === b.kind && a.id === b.id && a.attachmentId === b.attachmentId;
 
 // A check's reason in words. The standing rule and a request's note are already words.
@@ -87,6 +98,8 @@ export const booksTools = {
     guard: async (ctx, args) => {
       const request = args.requestId ? await handedOver(ctx, args.requestId) : null;
       if (args.requestId && (!request || !sameDocument(request.source, args.source))) return { deny: "That request does not name this document." };
+      const waiting = await waitingCard(ctx, args.invoice);
+      if (waiting) return { deny: `${CARD_WAITS}: ${args.invoice.vendorName} ${args.invoice.invoiceNumber}.` };
       const facts = await bookFacts(ctx.deps.books, args.invoice, args.source);
       const company = COMPANIES[ctx.scope.company];
       const reasons = checkInvoice(args.invoice, facts, { currency: company.currency, autoPostLimit: ctx.teammate.autoPostLimit, poTolerance: PO_TOLERANCE });

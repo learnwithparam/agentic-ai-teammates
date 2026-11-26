@@ -1,7 +1,7 @@
 import { Annotation, type BaseCheckpointSaver, END, interrupt, START, StateGraph } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { z } from "zod";
-import { type BookFacts, checkInvoice, Invoice, PO_TOLERANCE, type PurchaseOrder, REASONS, type Reason, type Vendor } from "../../checks";
+import { type BookFacts, CARD_WAITS, checkInvoice, Invoice, PO_TOLERANCE, type PurchaseOrder, REASONS, type Reason, type Vendor } from "../../checks";
 import { GatewayError } from "../../gateway-client";
 import { INSTRUCTIONS, notePath, vendorTopic } from "../../memory";
 import { modelSchema } from "../../model-schema";
@@ -313,7 +313,8 @@ function refused(state: State, reason: string): Partial<State> {
   return { result: { outcome: "handed_to_human", note: `QuirkBooks refused ${label(state)}: ${reason}` } };
 }
 
-function postResult(state: State, result: Awaited<ReturnType<Run["tool"]>>): Partial<State> {
+export function postResult(state: State, result: Awaited<ReturnType<Run["tool"]>>): Partial<State> {
+  if (result.status === "denied" && result.reason.startsWith(CARD_WAITS)) return { result: { outcome: "nothing_to_send", note: result.reason } };
   if (result.status === "denied") return { result: { outcome: "handed_to_human", note: `${label(state)} did not post: ${result.reason}` } };
   if (result.status === "needs_approval") return { result: { outcome: "handed_to_human", note: `${label(state)} asked for approval twice.` } };
   const posted = z.union([BillPosted, BillAlreadyPosted]).parse(result.result);

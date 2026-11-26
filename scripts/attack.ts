@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { createPool, migrate } from "../src/server/db";
+import { ensureHarnessTeammate } from "../src/server/teammates/ensure";
 import { requireSettings, setting } from "../src/server/env";
 import { GatewayClient, GatewayError } from "../src/server/gateway-client";
 import { Inbox } from "../src/server/inbox";
@@ -67,11 +68,7 @@ const PERSON = await asAda();
 
 async function attackTeammate(definition: TeammateDefinition): Promise<string> {
   const id = `${definition.kind}-attack`;
-  await pool.query(
-    `INSERT INTO teammates (company, id, kind, name, on_duty, quiet) VALUES ($1, $2, $3, $4, false, true)
-     ON CONFLICT (company, id) DO UPDATE SET paused = false, on_duty = false, quiet = true`,
-    [COMPANY, id, definition.kind, `${definition.name} attack`],
-  );
+  await ensureHarnessTeammate(pool, { company: COMPANY, id, kind: definition.kind, name: `${definition.name} attack` });
   return id;
 }
 

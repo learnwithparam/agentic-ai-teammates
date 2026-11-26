@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 import { startActiveObservation } from "@langfuse/tracing";
 import { createPool, migrate } from "../../src/server/db";
+import { ensureHarnessTeammate } from "../../src/server/teammates/ensure";
 import { requireSettings, setting } from "../../src/server/env";
 import { GatewayClient } from "../../src/server/gateway-client";
 import { ROUTING_MODES, type RoutingMode } from "../../src/server/router";
@@ -31,10 +32,7 @@ if (!modes.every((mode) => ROUTING_MODES.includes(mode))) throw new Error(`--rou
 
 const pool = createPool(setting("DATABASE_URL"));
 await migrate(pool);
-await pool.query(
-  "INSERT INTO teammates (company, id, kind, name, on_duty) VALUES ('bramble', $1, 'news', 'News eval', false) ON CONFLICT (company, id) DO UPDATE SET paused = false, on_duty = false",
-  [EVAL_TEAMMATE],
-);
+await ensureHarnessTeammate(pool, { company: "bramble", id: EVAL_TEAMMATE, kind: "news", name: "News eval" });
 const gateway = new GatewayClient(setting("GATEWAY_URL"), setting("GATEWAY_WORKER_TOKEN"));
 
 function verdictOf(said: Awaited<ReturnType<typeof screen>>): string {

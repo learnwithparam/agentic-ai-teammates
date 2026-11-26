@@ -312,6 +312,24 @@ test("the board shows only teammates the person may view", async () => {
   }
 });
 
+test("a harness teammate never reaches the board, and nobody decides its cards", async () => {
+  await pool.query("INSERT INTO teammates (company, id, kind, name, on_duty, quiet, harness) VALUES ('bramble', 'invoice-attack', 'invoice', 'Invoice attack', false, true, true) ON CONFLICT DO NOTHING");
+  const runId = randomUUID();
+  await pool.query("INSERT INTO runs (id, company, teammate) VALUES ($1, 'bramble', 'invoice-attack')", [runId]);
+  const card = await new Approvals(pool).request({
+    company: "bramble", teammate: "invoice-attack", runId, threadId: `attack:${runId}`, tool: "books.post_bill",
+    args: { amount: 120 }, amount: 120, currency: "EUR", title: "Post a bill", brief: "An attack case.", reasons: [], canAllowAlways: false,
+  });
+  signedIn = ADA;
+  const board = (await (await call("/api/board")).json()) as { teammates: { id: string }[]; approvals: { id: string }[] };
+  assert.ok(!board.teammates.some((mate) => mate.id === "invoice-attack"), "the harness teammate is on the roster");
+  assert.ok(!board.approvals.some((item) => item.id === card.id), "the harness card is on the board");
+  const decided = await call(`/api/approvals/${card.id}/decide`, { method: "POST", body: { approve: true } });
+  assert.equal(decided.status, 409);
+  const { rows } = await pool.query("SELECT status FROM approvals WHERE id = $1", [card.id]);
+  assert.equal(rows[0].status, "pending");
+});
+
 test("an approver's limit travels as the condition on their approver tuple", () => {
   const tuples = contextualTuples(RAVI, { type: "approval", id: "a1", company: "bramble" });
   assert.deepEqual(tuples, [

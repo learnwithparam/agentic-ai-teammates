@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createPool, migrate } from "../../src/server/db";
+import { ensureHarnessTeammate } from "../../src/server/teammates/ensure";
 import { requireSettings, setting } from "../../src/server/env";
 import { GatewayClient } from "../../src/server/gateway-client";
 import { DueBillSchema, payProblems, runTotal } from "../../src/server/payments";
@@ -34,10 +35,7 @@ const CHANGED_BANK = SEEDED[2].id;
 
 const pool = createPool(setting("DATABASE_URL"));
 await migrate(pool);
-await pool.query(
-  "INSERT INTO teammates (company, id, kind, name, on_duty) VALUES ($1, $2, 'payments', 'Payments eval', false) ON CONFLICT (company, id) DO UPDATE SET paused = false, on_duty = false",
-  [COMPANY, EVAL_TEAMMATE],
-);
+await ensureHarnessTeammate(pool, { company: COMPANY, id: EVAL_TEAMMATE, kind: "payments", name: "Payments eval" });
 const gateway = new GatewayClient(setting("GATEWAY_URL"), setting("GATEWAY_WORKER_TOKEN"));
 const run = await Run.start(pool, gateway, { runId: randomUUID(), company: COMPANY, teammate: EVAL_TEAMMATE });
 const thread = `eval:payments:${TODAY}`;
